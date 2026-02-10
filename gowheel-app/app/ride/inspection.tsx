@@ -1,33 +1,41 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-    View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-    Alert, ActivityIndicator,
+    View, Text, StyleSheet, TouchableOpacity, Image, ScrollView,
+    ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Colors, Spacing, FontSize, Radius, cardShadow } from '@/lib/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Spacing, FontSize, Radius, cardShadow } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
-import {
-    uploadInspectionImage, getInspectionImages, getInspectionStatus,
-    confirmInspection, validatePreRideInspection,
-} from '@/services/rideInspectionService';
-import { positionLabels, ImagePosition, InspectionType, RideInspectionImage, REQUIRED_PRE_RIDE_POSITIONS } from '@/types/rideInspection';
 import * as ImagePicker from 'expo-image-picker';
+import { getInspectionImages, uploadInspectionImage, confirmInspection } from '@/services/rideInspectionService';
+import { InspectionImage, ImagePosition, positionLabels, InspectionType } from '@/types/ride';
+
+const REQUIRED_PRE_RIDE_POSITIONS: ImagePosition[] = ['front', 'left', 'right', 'back', 'meter'];
 
 export default function RideInspectionScreen() {
     const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
     const router = useRouter();
+    const { user } = useAuth();
+    const { colors } = useTheme();
 
-    const [inspectionType, setInspectionType] = useState<InspectionType>('pre_ride');
-    const [images, setImages] = useState<RideInspectionImage[]>([]);
+    const [images, setImages] = useState<InspectionImage[]>([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState<ImagePosition | null>(null);
+    const [inspectionType, setInspectionType] = useState<InspectionType>('pre_ride');
     const [submitting, setSubmitting] = useState(false);
 
     const loadImages = useCallback(async () => {
         if (!bookingId) return;
-        const imgs = await getInspectionImages(bookingId, inspectionType);
-        setImages(imgs);
-        setLoading(false);
+        try {
+            const data = await getInspectionImages(bookingId, inspectionType);
+            setImages(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     }, [bookingId, inspectionType]);
 
     useEffect(() => { setLoading(true); loadImages(); }, [loadImages]);
@@ -95,17 +103,25 @@ export default function RideInspectionScreen() {
 
     return (
         <>
-            <Stack.Screen options={{ title: 'Ride Inspection', headerStyle: { backgroundColor: Colors.background }, headerTintColor: Colors.text }} />
-            <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+            <Stack.Screen options={{ title: 'Ride Inspection', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.text }} />
+            <ScrollView style={[s.container, { backgroundColor: colors.background }]} contentContainerStyle={s.content}>
                 {/* Type Toggle */}
-                <View style={styles.typeToggle}>
+                <View style={s.typeToggle}>
                     {(['pre_ride', 'post_ride'] as InspectionType[]).map(type => (
                         <TouchableOpacity
                             key={type}
-                            style={[styles.typeBtn, inspectionType === type && styles.typeBtnActive]}
+                            style={[
+                                s.typeBtn,
+                                { borderColor: colors.border },
+                                inspectionType === type && { borderColor: colors.primary, backgroundColor: 'rgba(16,185,129,0.1)' }
+                            ]}
                             onPress={() => setInspectionType(type)}
                         >
-                            <Text style={[styles.typeBtnText, inspectionType === type && styles.typeBtnTextActive]}>
+                            <Text style={[
+                                s.typeBtnText,
+                                { color: colors.textSecondary },
+                                inspectionType === type && { color: colors.primary }
+                            ]}>
                                 {type === 'pre_ride' ? '📸 Pre-Ride' : '📷 Post-Ride'}
                             </Text>
                         </TouchableOpacity>
@@ -114,14 +130,14 @@ export default function RideInspectionScreen() {
 
                 {/* Progress Bar */}
                 {inspectionType === 'pre_ride' && (
-                    <View style={styles.progressSection}>
-                        <View style={styles.progressBarBg}>
+                    <View style={s.progressSection}>
+                        <View style={[s.progressBarBg, { backgroundColor: colors.surface }]}>
                             <View style={[
-                                styles.progressBarFill,
-                                { width: `${(uploadedRequired.length / requiredPositions.length) * 100}%` }
+                                s.progressBarFill,
+                                { width: `${(uploadedRequired.length / requiredPositions.length) * 100}%`, backgroundColor: colors.success }
                             ]} />
                         </View>
-                        <Text style={styles.progressText}>
+                        <Text style={[s.progressText, { color: colors.textMuted }]}>
                             {allRequiredUploaded
                                 ? '🎉 All required photos uploaded!'
                                 : `${requiredPositions.length - uploadedRequired.length} required photo${(requiredPositions.length - uploadedRequired.length) !== 1 ? 's' : ''} remaining`
@@ -130,12 +146,12 @@ export default function RideInspectionScreen() {
                     </View>
                 )}
 
-                <Text style={styles.hint}>Upload photos from each angle to document the vehicle condition</Text>
+                <Text style={[s.hint, { color: colors.textMuted }]}>Upload photos from each angle to document the vehicle condition</Text>
 
                 {loading ? (
-                    <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                    <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
                 ) : (
-                    <View style={styles.grid}>
+                    <View style={s.grid}>
                         {positions.map(pos => {
                             const existing = getImageForPosition(pos);
                             const info = positionLabels[pos];
@@ -145,28 +161,32 @@ export default function RideInspectionScreen() {
                             return (
                                 <TouchableOpacity
                                     key={pos}
-                                    style={[styles.positionCard, existing && styles.positionCardDone]}
+                                    style={[
+                                        s.positionCard,
+                                        { backgroundColor: colors.card, borderColor: colors.border },
+                                        existing && { borderColor: colors.success }
+                                    ]}
                                     onPress={() => !existing && handleUpload(pos)}
                                     disabled={!!existing || !!isUploading}
                                 >
                                     {existing ? (
-                                        <Image source={{ uri: existing.image_url }} style={styles.positionImage} />
+                                        <Image source={{ uri: existing.image_url }} style={s.positionImage} />
                                     ) : isUploading ? (
-                                        <View style={styles.positionPlaceholder}>
-                                            <ActivityIndicator color={Colors.primary} />
+                                        <View style={[s.positionPlaceholder, { backgroundColor: colors.surface }]}>
+                                            <ActivityIndicator color={colors.primary} />
                                         </View>
                                     ) : (
-                                        <View style={styles.positionPlaceholder}>
-                                            <Text style={styles.positionEmoji}>{info.icon}</Text>
-                                            <Ionicons name="camera-outline" size={20} color={Colors.textMuted} />
+                                        <View style={[s.positionPlaceholder, { backgroundColor: colors.surface }]}>
+                                            <Text style={s.positionEmoji}>{info.icon}</Text>
+                                            <Ionicons name="camera-outline" size={20} color={colors.textMuted} />
                                         </View>
                                     )}
-                                    <View style={styles.positionInfo}>
-                                        <Text style={styles.positionLabel}>
-                                            {info.label} {isRequired && <Text style={styles.required}>*</Text>}
+                                    <View style={s.positionInfo}>
+                                        <Text style={[s.positionLabel, { color: colors.text }]}>
+                                            {info.label} {isRequired && <Text style={[s.required, { color: colors.error }]}>*</Text>}
                                         </Text>
-                                        <Text style={styles.positionDesc} numberOfLines={1}>{info.description}</Text>
-                                        {existing && <Text style={styles.uploadedTag}>✓ Uploaded</Text>}
+                                        <Text style={[s.positionDesc, { color: colors.textMuted }]} numberOfLines={1}>{info.description}</Text>
+                                        {existing && <Text style={[s.uploadedTag, { color: colors.success }]}>✓ Uploaded</Text>}
                                     </View>
                                 </TouchableOpacity>
                             );
@@ -176,28 +196,28 @@ export default function RideInspectionScreen() {
 
                 {/* Confirm & Submit Button */}
                 {inspectionType === 'pre_ride' && allRequiredUploaded && (
-                    <View style={styles.submitSection}>
-                        <View style={styles.submitInfoCard}>
-                            <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+                    <View style={s.submitSection}>
+                        <View style={[s.submitInfoCard, { borderColor: colors.success, backgroundColor: `${colors.success}10` }]}>
+                            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.submitInfoTitle}>All Photos Ready!</Text>
-                                <Text style={styles.submitInfoSub}>
+                                <Text style={[s.submitInfoTitle, { color: colors.success }]}>All Photos Ready!</Text>
+                                <Text style={[s.submitInfoSub, { color: colors.textSecondary }]}>
                                     Review your photos above. Once submitted, the owner will generate your ride start OTP.
                                 </Text>
                             </View>
                         </View>
 
                         <TouchableOpacity
-                            style={styles.submitButton}
+                            style={[s.submitButton, { backgroundColor: colors.success }]}
                             onPress={handleConfirmSubmission}
                             disabled={submitting}
                         >
                             {submitting ? (
-                                <ActivityIndicator size="small" color={Colors.white} />
+                                <ActivityIndicator size="small" color="#fff" />
                             ) : (
                                 <>
-                                    <Ionicons name="checkmark-done" size={20} color={Colors.white} />
-                                    <Text style={styles.submitButtonText}>Confirm & Submit Inspection</Text>
+                                    <Ionicons name="checkmark-done" size={20} color="#fff" />
+                                    <Text style={s.submitButtonText}>Confirm & Submit Inspection</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -208,32 +228,29 @@ export default function RideInspectionScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: Colors.background },
+const s = StyleSheet.create({
+    container: { flex: 1 },
     content: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: 60 },
     typeToggle: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
-    typeBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
-    typeBtnActive: { borderColor: Colors.primary, backgroundColor: 'rgba(16,185,129,0.1)' },
-    typeBtnText: { fontSize: FontSize.md, color: Colors.textSecondary, fontWeight: '500' },
-    typeBtnTextActive: { color: Colors.primary },
+    typeBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center' },
+    typeBtnText: { fontSize: FontSize.md, fontWeight: '500' },
 
     progressSection: { marginBottom: Spacing.md },
-    progressBarBg: { height: 6, backgroundColor: Colors.surface, borderRadius: 3, overflow: 'hidden' },
-    progressBarFill: { height: '100%', backgroundColor: Colors.success, borderRadius: 3 },
-    progressText: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.xs },
+    progressBarBg: { height: 6, borderRadius: 3, overflow: 'hidden' },
+    progressBarFill: { height: '100%', borderRadius: 3 },
+    progressText: { fontSize: FontSize.xs, textAlign: 'center', marginTop: Spacing.xs },
 
-    hint: { fontSize: FontSize.sm, color: Colors.textMuted, marginBottom: Spacing.lg, textAlign: 'center' },
+    hint: { fontSize: FontSize.sm, marginBottom: Spacing.lg, textAlign: 'center' },
     grid: { gap: Spacing.md },
-    positionCard: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden', ...cardShadow },
-    positionCardDone: { borderColor: Colors.success },
+    positionCard: { flexDirection: 'row', borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', ...cardShadow },
     positionImage: { width: 90, height: 70 },
-    positionPlaceholder: { width: 90, height: 70, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center' },
+    positionPlaceholder: { width: 90, height: 70, justifyContent: 'center', alignItems: 'center' },
     positionEmoji: { fontSize: 20, marginBottom: 2 },
     positionInfo: { flex: 1, padding: Spacing.md, justifyContent: 'center' },
-    positionLabel: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-    required: { color: Colors.error },
-    positionDesc: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
-    uploadedTag: { fontSize: FontSize.xs, color: Colors.success, fontWeight: '600', marginTop: 4 },
+    positionLabel: { fontSize: FontSize.md, fontWeight: '600' },
+    required: {},
+    positionDesc: { fontSize: FontSize.xs, marginTop: 2 },
+    uploadedTag: { fontSize: FontSize.xs, fontWeight: '600', marginTop: 4 },
 
     submitSection: { marginTop: Spacing.xl },
     submitInfoCard: {
@@ -243,20 +260,17 @@ const styles = StyleSheet.create({
         padding: Spacing.lg,
         borderRadius: Radius.lg,
         borderWidth: 1,
-        borderColor: Colors.success,
-        backgroundColor: `${Colors.success}10`,
         marginBottom: Spacing.md,
     },
-    submitInfoTitle: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.success },
-    submitInfoSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
+    submitInfoTitle: { fontSize: FontSize.sm, fontWeight: '600' },
+    submitInfoSub: { fontSize: FontSize.xs, marginTop: 2 },
     submitButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: Spacing.sm,
-        backgroundColor: Colors.success,
         borderRadius: Radius.md,
         paddingVertical: Spacing.lg,
     },
-    submitButtonText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
+    submitButtonText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
 });

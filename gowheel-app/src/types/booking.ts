@@ -52,6 +52,8 @@ export interface BookingWithVehicle extends Booking {
         vehicle_type: 'car' | 'bike';
         price_per_day: number;
         location: string;
+        latitude?: number;
+        longitude?: number;
         registration_number?: string;
         images?: { id: string; image_url: string; is_primary: boolean }[];
     };

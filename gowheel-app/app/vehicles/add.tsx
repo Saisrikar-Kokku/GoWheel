@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-    Alert, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
+    Alert, ActivityIndicator, Image, KeyboardAvoidingView, Platform, Linking
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Colors, Spacing, FontSize, Radius } from '@/lib/theme';
@@ -9,14 +9,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { createVehicle, uploadVehicleImage } from '@/services/vehicleService';
 import { VehicleFormData, VehicleType } from '@/types/vehicle';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 
 export default function AddVehicleScreen() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [locLoading, setLocLoading] = useState(false);
     const [images, setImages] = useState<{ uri: string; name: string; type: string }[]>([]);
     const [form, setForm] = useState<VehicleFormData>({
         title: '', vehicle_type: 'car', brand: '', model: '', year: new Date().getFullYear(),
-        price_per_day: 0, location: '', description: '', is_active: true,
+        price_per_day: 0, location: '', latitude: undefined, longitude: undefined, description: '', is_active: true,
     });
 
     const updateForm = (key: keyof VehicleFormData, value: any) => setForm(prev => ({ ...prev, [key]: value }));
@@ -32,6 +34,40 @@ export default function AddVehicleScreen() {
     };
 
     const removeImage = (index: number) => setImages(prev => prev.filter((_, i) => i !== index));
+
+    const getCurrentLocation = async () => {
+        setLocLoading(true);
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Permission to access location was denied');
+                return;
+            }
+
+            const location = await Location.getCurrentPositionAsync({});
+            updateForm('latitude', location.coords.latitude);
+            updateForm('longitude', location.coords.longitude);
+
+            // Reverse geocode to get address if location field is empty
+            if (!form.location) {
+                const reverseGeocode = await Location.reverseGeocodeAsync({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude
+                });
+                if (reverseGeocode.length > 0) {
+                    const addr = reverseGeocode[0];
+                    const addressString = [addr.city, addr.region, addr.country].filter(Boolean).join(', ');
+                    updateForm('location', addressString);
+                }
+            }
+
+            Alert.alert('✅ Location Fetched', 'Coordinates updated successfully!');
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Could not fetch location');
+        } finally {
+            setLocLoading(false);
+        }
+    };
 
     const handleSubmit = async () => {
         if (!form.title || !form.brand || !form.model || !form.location || form.price_per_day <= 0) {
@@ -77,8 +113,6 @@ export default function AddVehicleScreen() {
                         { key: 'model', label: 'Model *', placeholder: 'e.g., Classic 350', kbd: 'default' },
                         { key: 'year', label: 'Year *', placeholder: '2024', kbd: 'numeric' },
                         { key: 'price_per_day', label: 'Price Per Hour (₹) *', placeholder: '50', kbd: 'numeric' },
-                        { key: 'location', label: 'Location *', placeholder: 'e.g., Hyderabad', kbd: 'default' },
-                        { key: 'registration_number', label: 'Registration Number', placeholder: 'TS09AB1234', kbd: 'default' },
                     ].map(field => (
                         <View key={field.key} style={styles.inputGroup}>
                             <Text style={styles.label}>{field.label}</Text>
@@ -92,6 +126,46 @@ export default function AddVehicleScreen() {
                             />
                         </View>
                     ))}
+
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Location *</Text>
+                        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                            <TextInput
+                                style={[styles.input, { flex: 1 }]}
+                                placeholder="e.g., Hyderabad"
+                                placeholderTextColor={Colors.textMuted}
+                                value={form.location}
+                                onChangeText={v => updateForm('location', v)}
+                            />
+                            <TouchableOpacity
+                                style={[styles.locationBtn, { backgroundColor: form.latitude ? Colors.success : Colors.primary }]}
+                                onPress={getCurrentLocation}
+                                disabled={locLoading}
+                            >
+                                {locLoading ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Ionicons name={form.latitude ? "location" : "locate"} size={20} color="#fff" />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                        {form.latitude && (
+                            <Text style={{ fontSize: FontSize.xs, color: Colors.success, marginTop: 4 }}>
+                                ✓ Coordinates captured ({form.latitude.toFixed(4)}, {form.longitude?.toFixed(4)})
+                            </Text>
+                        )}
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Registration Number</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="TS09AB1234"
+                            placeholderTextColor={Colors.textMuted}
+                            value={form.registration_number || ''}
+                            onChangeText={v => updateForm('registration_number', v)}
+                        />
+                    </View>
 
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Description</Text>
@@ -150,6 +224,7 @@ const styles = StyleSheet.create({
     inputGroup: { marginBottom: Spacing.lg },
     label: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.sm, fontWeight: '500' },
     input: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.lg, paddingVertical: 14, color: Colors.text, fontSize: FontSize.md },
+    locationBtn: { width: 50, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center' },
     textArea: { height: 90, paddingTop: Spacing.md },
     imagePickerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, borderStyle: 'dashed', paddingVertical: Spacing.xl },
     imagePickerText: { fontSize: FontSize.md, color: Colors.primary, fontWeight: '500' },

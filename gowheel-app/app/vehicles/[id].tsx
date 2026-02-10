@@ -1,17 +1,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
-    ActivityIndicator, Alert, Dimensions, Modal, FlatList, Platform,
+    ActivityIndicator, Alert, Dimensions, Modal, FlatList,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors, Spacing, FontSize, Radius } from '@/lib/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Spacing, FontSize, Radius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { getVehicleDetailsById } from '@/services/vehicleService';
+import { getVehicleDetailsById, updateVehicle } from '@/services/vehicleService';
 import { createBookingRequest } from '@/services/bookingService';
 import { VehicleWithOwner } from '@/types/vehicle';
 import { addDays, format, differenceInHours, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
-import { updateVehicle } from '@/services/vehicleService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -36,6 +36,7 @@ const generateDates = () => {
 export default function VehicleDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { profile, user } = useAuth();
+    const { colors } = useTheme();
     const router = useRouter();
 
     const [vehicle, setVehicle] = useState<VehicleWithOwner | null>(null);
@@ -162,11 +163,11 @@ export default function VehicleDetailScreen() {
         visible: boolean; onClose: () => void; onSelect: (d: Date) => void; minDate?: Date; title: string;
     }) => (
         <Modal visible={visible} transparent animationType="slide">
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>{title}</Text>
-                        <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={onClose}>
+                <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+                    <View style={s.modalHeader}>
+                        <Text style={[s.modalTitle, { color: colors.text }]}>{title}</Text>
+                        <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
                     </View>
                     <FlatList
                         data={availableDates.filter(d => !minDate || d >= minDate)}
@@ -179,18 +180,18 @@ export default function VehicleDetailScreen() {
                             );
                             return (
                                 <TouchableOpacity
-                                    style={[styles.dateItem, isSelected && styles.dateItemSelected]}
+                                    style={[s.dateItem, isSelected && { backgroundColor: colors.primary }]}
                                     onPress={() => onSelect(item)}
                                 >
                                     <View>
-                                        <Text style={[styles.dateItemDay, isSelected && styles.dateItemTextSelected]}>
+                                        <Text style={[s.dateItemDay, { color: isSelected ? '#fff' : colors.textSecondary }]}>
                                             {format(item, 'EEEE')}
                                         </Text>
-                                        <Text style={[styles.dateItemFull, isSelected && styles.dateItemTextSelected]}>
+                                        <Text style={[s.dateItemFull, { color: isSelected ? '#fff' : colors.text }]}>
                                             {format(item, 'dd MMM yyyy')}
                                         </Text>
                                     </View>
-                                    {isSelected && <Ionicons name="checkmark-circle" size={24} color={Colors.white} />}
+                                    {isSelected && <Ionicons name="checkmark-circle" size={24} color="#fff" />}
                                 </TouchableOpacity>
                             );
                         }}
@@ -205,11 +206,11 @@ export default function VehicleDetailScreen() {
         visible: boolean; onClose: () => void; onSelect: (h: number) => void; selectedHour: number; title: string;
     }) => (
         <Modal visible={visible} transparent animationType="slide">
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>{title}</Text>
-                        <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+            <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={onClose}>
+                <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+                    <View style={s.modalHeader}>
+                        <Text style={[s.modalTitle, { color: colors.text }]}>{title}</Text>
+                        <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
                     </View>
                     <FlatList
                         data={TIME_SLOTS}
@@ -220,16 +221,16 @@ export default function VehicleDetailScreen() {
                             const isSelected = item.value === selectedHour;
                             return (
                                 <TouchableOpacity
-                                    style={[styles.timeItem, isSelected && styles.timeItemSelected]}
+                                    style={[s.timeItem, isSelected && { backgroundColor: colors.primary }]}
                                     onPress={() => { onSelect(item.value); onClose(); }}
                                 >
-                                    <View style={styles.timeItemLeft}>
-                                        <Ionicons name="time-outline" size={20} color={isSelected ? Colors.white : Colors.textSecondary} />
-                                        <Text style={[styles.timeItemText, isSelected && styles.timeItemTextSelected]}>
+                                    <View style={s.timeItemLeft}>
+                                        <Ionicons name="time-outline" size={20} color={isSelected ? '#fff' : colors.textSecondary} />
+                                        <Text style={[s.timeItemText, { color: isSelected ? '#fff' : colors.text }]}>
                                             {item.label}
                                         </Text>
                                     </View>
-                                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={Colors.white} />}
+                                    {isSelected && <Ionicons name="checkmark-circle" size={22} color="#fff" />}
                                 </TouchableOpacity>
                             );
                         }}
@@ -245,112 +246,112 @@ export default function VehicleDetailScreen() {
         return slot?.label || `${hour}:00`;
     };
 
-    if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
-    if (!vehicle) return <View style={styles.center}><Ionicons name="alert-circle" size={60} color={Colors.textMuted} /><Text style={styles.errorText}>Vehicle not found</Text></View>;
+    if (loading) return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
+    if (!vehicle) return <View style={[s.center, { backgroundColor: colors.background }]}><Ionicons name="alert-circle" size={60} color={colors.textMuted} /><Text style={[s.errorText, { color: colors.textMuted }]}>Vehicle not found</Text></View>;
 
     return (
         <>
-            <Stack.Screen options={{ title: vehicle.title, headerStyle: { backgroundColor: Colors.background }, headerTintColor: Colors.text }} />
-            <ScrollView style={styles.container}>
+            <Stack.Screen options={{ title: vehicle.title, headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.text }} />
+            <ScrollView style={[s.container, { backgroundColor: colors.background }]}>
                 {/* Image Carousel */}
                 <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setImageIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}>
                     {vehicle.images && vehicle.images.length > 0 ? (
                         vehicle.images.map((img, i) => (
-                            <Image key={i} source={{ uri: img.image_url }} style={styles.heroImage} resizeMode="cover" />
+                            <Image key={i} source={{ uri: img.image_url }} style={s.heroImage} resizeMode="cover" />
                         ))
                     ) : (
-                        <View style={[styles.heroImage, styles.noImage]}><Ionicons name="image-outline" size={60} color={Colors.textMuted} /></View>
+                        <View style={[s.heroImage, s.noImage, { backgroundColor: colors.surface }]}><Ionicons name="image-outline" size={60} color={colors.textMuted} /></View>
                     )}
                 </ScrollView>
                 {vehicle.images && vehicle.images.length > 1 && (
-                    <View style={styles.dots}>
-                        {vehicle.images.map((_, i) => <View key={i} style={[styles.dot, i === imageIndex && styles.dotActive]} />)}
+                    <View style={s.dots}>
+                        {vehicle.images.map((_, i) => <View key={i} style={[s.dot, { backgroundColor: i === imageIndex ? colors.primary : colors.border }, i === imageIndex && s.dotActive]} />)}
                     </View>
                 )}
 
                 {/* Info */}
-                <View style={styles.infoSection}>
-                    <View style={styles.row}>
-                        <Text style={styles.title}>{vehicle.title}</Text>
-                        <View style={[styles.typeBadge, { backgroundColor: vehicle.vehicle_type === 'car' ? 'rgba(59,130,246,0.15)' : 'rgba(16,185,129,0.15)' }]}>
-                            <Text style={[styles.typeBadgeText, { color: vehicle.vehicle_type === 'car' ? Colors.info : Colors.primary }]}>
+                <View style={s.infoSection}>
+                    <View style={s.row}>
+                        <Text style={[s.title, { color: colors.text }]}>{vehicle.title}</Text>
+                        <View style={[s.typeBadge, { backgroundColor: vehicle.vehicle_type === 'car' ? 'rgba(59,130,246,0.15)' : 'rgba(16,185,129,0.15)' }]}>
+                            <Text style={[s.typeBadgeText, { color: vehicle.vehicle_type === 'car' ? colors.info : colors.primary }]}>
                                 {vehicle.vehicle_type === 'car' ? '🚗 Car' : '🏍️ Bike'}
                             </Text>
                         </View>
                     </View>
-                    <Text style={styles.brandModel}>{vehicle.brand} {vehicle.model} • {vehicle.year}</Text>
+                    <Text style={[s.brandModel, { color: colors.textSecondary }]}>{vehicle.brand} {vehicle.model} • {vehicle.year}</Text>
 
-                    <View style={styles.priceRow}>
-                        <Text style={styles.price}>₹{vehicle.price_per_day}</Text>
-                        <Text style={styles.perHour}> /hr</Text>
+                    <View style={s.priceRow}>
+                        <Text style={[s.price, { color: colors.primary }]}>₹{vehicle.price_per_day}</Text>
+                        <Text style={[s.perHour, { color: colors.textSecondary }]}> /hr</Text>
                     </View>
-                    <Text style={styles.freeCancel}>✓ Free cancellation up to 24 hours before</Text>
+                    <Text style={s.freeCancel}>✓ Free cancellation up to 24 hours before</Text>
 
-                    <View style={styles.detailsGrid}>
-                        <View style={styles.detailItem}>
-                            <Ionicons name="location" size={18} color={Colors.primary} />
-                            <Text style={styles.detailText}>{vehicle.location}</Text>
+                    <View style={s.detailsGrid}>
+                        <View style={s.detailItem}>
+                            <Ionicons name="location" size={18} color={colors.primary} />
+                            <Text style={[s.detailText, { color: colors.text }]}>{vehicle.location}</Text>
                         </View>
                         {vehicle.registration_number && (
-                            <View style={styles.detailItem}>
-                                <Ionicons name="document-text" size={18} color={Colors.info} />
-                                <Text style={styles.detailText}>{vehicle.registration_number}</Text>
+                            <View style={s.detailItem}>
+                                <Ionicons name="document-text" size={18} color={colors.info} />
+                                <Text style={[s.detailText, { color: colors.text }]}>{vehicle.registration_number}</Text>
                             </View>
                         )}
                     </View>
 
                     {vehicle.description && (
-                        <View style={styles.descSection}>
-                            <Text style={styles.sectionTitle}>Description</Text>
-                            <Text style={styles.description}>{vehicle.description}</Text>
+                        <View style={s.descSection}>
+                            <Text style={[s.sectionTitle, { color: colors.text }]}>Description</Text>
+                            <Text style={[s.description, { color: colors.textSecondary }]}>{vehicle.description}</Text>
                         </View>
                     )}
 
                     {/* Owner info */}
                     {vehicle.owner && (
-                        <View style={styles.ownerCard}>
-                            <View style={styles.ownerAvatar}>
-                                <Text style={styles.ownerAvatarText}>{vehicle.owner.full_name?.charAt(0) || '?'}</Text>
+                        <View style={[s.ownerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <View style={[s.ownerAvatar, { backgroundColor: colors.primary }]}>
+                                <Text style={s.ownerAvatarText}>{vehicle.owner.full_name?.charAt(0) || '?'}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.ownerName}>{vehicle.owner.full_name}</Text>
-                                <Text style={styles.ownerSince}>Member since {new Date(vehicle.owner.created_at).getFullYear()}</Text>
+                                <Text style={[s.ownerName, { color: colors.text }]}>{vehicle.owner.full_name}</Text>
+                                <Text style={[s.ownerSince, { color: colors.textSecondary }]}>Member since {new Date(vehicle.owner.created_at).getFullYear()}</Text>
                             </View>
-                            <View style={styles.verifiedBadge}>
+                            <View style={s.verifiedBadge}>
                                 <Ionicons name="checkmark-circle" size={14} color="#10b981" />
-                                <Text style={styles.verifiedText}>Verified</Text>
+                                <Text style={s.verifiedText}>Verified</Text>
                             </View>
                         </View>
                     )}
 
                     {/* Security Deposit */}
                     {vehicle.security_deposit_text && (
-                        <View style={styles.depositCard}>
-                            <Ionicons name="shield-checkmark" size={20} color={Colors.warning} />
-                            <Text style={styles.depositText}>{vehicle.security_deposit_text}</Text>
+                        <View style={s.depositCard}>
+                            <Ionicons name="shield-checkmark" size={20} color={colors.warning} />
+                            <Text style={[s.depositText, { color: colors.textSecondary }]}>{vehicle.security_deposit_text}</Text>
                         </View>
                     )}
 
                     {/* Owner Actions */}
                     {(isOwner || isMyVehicle) && vehicle.vehicle_status !== 'approved' && (
-                        <View style={styles.section}>
+                        <View style={[s.section, { borderTopColor: colors.border }]}>
                             <View style={[
-                                styles.statusBanner,
-                                vehicle.vehicle_status === 'rejected' ? { backgroundColor: Colors.error + '20' } : { backgroundColor: Colors.warning + '20' }
+                                s.statusBanner,
+                                vehicle.vehicle_status === 'rejected' ? { backgroundColor: colors.error + '20' } : { backgroundColor: colors.warning + '20' }
                             ]}>
                                 <Ionicons
                                     name={vehicle.vehicle_status === 'rejected' ? "alert-circle" : "time"}
                                     size={24}
-                                    color={vehicle.vehicle_status === 'rejected' ? Colors.error : Colors.warning}
+                                    color={vehicle.vehicle_status === 'rejected' ? colors.error : colors.warning}
                                 />
                                 <View style={{ flex: 1 }}>
                                     <Text style={[
-                                        styles.statusTitle,
-                                        { color: vehicle.vehicle_status === 'rejected' ? Colors.error : Colors.warning }
+                                        s.statusTitle,
+                                        { color: vehicle.vehicle_status === 'rejected' ? colors.error : colors.warning }
                                     ]}>
                                         {vehicle.vehicle_status === 'rejected' ? 'Verification Rejected' : vehicle.vehicle_status === 'pending_verification' ? 'Pending Verification' : 'Draft Vehicle'}
                                     </Text>
-                                    <Text style={styles.statusDesc}>
+                                    <Text style={[s.statusDesc, { color: colors.textSecondary }]}>
                                         {vehicle.vehicle_status === 'rejected'
                                             ? vehicle.rejection_reason || 'Please update documents.'
                                             : vehicle.vehicle_status === 'pending_verification'
@@ -362,31 +363,31 @@ export default function VehicleDetailScreen() {
 
                             {(vehicle.vehicle_status === 'draft' || vehicle.vehicle_status === 'rejected') && (
                                 <TouchableOpacity
-                                    style={styles.verifyButton}
+                                    style={[s.verifyButton, { backgroundColor: colors.primary }]}
                                     onPress={() => router.push(`/vehicles/${vehicle.id}/kyc`)}
                                 >
-                                    <Text style={styles.verifyButtonText}>
+                                    <Text style={s.verifyButtonText}>
                                         {vehicle.vehicle_status === 'rejected' ? 'Re-upload Documents' : 'Complete Verification'}
                                     </Text>
-                                    <Ionicons name="arrow-forward" size={20} color={Colors.white} />
+                                    <Ionicons name="arrow-forward" size={20} color="#fff" />
                                 </TouchableOpacity>
                             )}
 
                             <TouchableOpacity
-                                style={[styles.verifyButton, { marginTop: Spacing.md, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border }]}
+                                style={[s.verifyButton, { marginTop: Spacing.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
                                 onPress={() => router.push(`/vehicles/${vehicle.id}/edit`)}
                             >
-                                <Ionicons name="create-outline" size={20} color={Colors.text} />
-                                <Text style={[styles.verifyButtonText, { color: Colors.text }]}>Edit Vehicle Details</Text>
+                                <Ionicons name="create-outline" size={20} color={colors.text} />
+                                <Text style={[s.verifyButtonText, { color: colors.text }]}>Edit Vehicle Details</Text>
                             </TouchableOpacity>
                         </View>
                     )}
 
                     {/* ADMIN: KYC Verification Section */}
                     {profile?.role === 'admin' && (
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>KYC Documents (Admin Only)</Text>
-                            <View style={styles.kycGrid}>
+                        <View style={[s.section, { borderTopColor: colors.border }]}>
+                            <Text style={[s.sectionTitle, { color: colors.text }]}>KYC Documents (Admin Only)</Text>
+                            <View style={s.kycGrid}>
                                 {[
                                     { label: 'RC Front', url: vehicle.rc_front_url },
                                     { label: 'RC Back', url: vehicle.rc_back_url },
@@ -395,27 +396,27 @@ export default function VehicleDetailScreen() {
                                     { label: 'Aadhaar Front', url: vehicle.aadhaar_front_url },
                                     { label: 'Aadhaar Back', url: vehicle.aadhaar_back_url },
                                 ].map((doc, idx) => (
-                                    <View key={idx} style={styles.kycItem}>
-                                        <Text style={styles.kycLabel}>{doc.label}</Text>
+                                    <View key={idx} style={s.kycItem}>
+                                        <Text style={[s.kycLabel, { color: colors.textSecondary }]}>{doc.label}</Text>
                                         {doc.url ? (
                                             <TouchableOpacity onPress={() => {/* View full screen TODO */ }}>
-                                                <Image source={{ uri: doc.url }} style={styles.kycImage} resizeMode="contain" />
+                                                <Image source={{ uri: doc.url }} style={[s.kycImage, { borderColor: colors.border, backgroundColor: colors.surface }]} resizeMode="contain" />
                                             </TouchableOpacity>
                                         ) : (
-                                            <View style={[styles.kycImage, styles.noImage]}>
-                                                <Text style={styles.errorText}>Missing</Text>
+                                            <View style={[s.kycImage, s.noImage, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                                                <Text style={[s.errorText, { color: colors.textMuted }]}>Missing</Text>
                                             </View>
                                         )}
                                     </View>
                                 ))}
                             </View>
 
-                            <View style={styles.adminActions}>
-                                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.success }]} onPress={() => handleAdminAction('approve')}>
-                                    <Text style={styles.actionBtnText}>✓ Approve Vehicle</Text>
+                            <View style={s.adminActions}>
+                                <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.success }]} onPress={() => handleAdminAction('approve')}>
+                                    <Text style={s.actionBtnText}>✓ Approve Vehicle</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.error }]} onPress={() => handleAdminAction('reject')}>
-                                    <Text style={styles.actionBtnText}>✗ Reject Vehicle</Text>
+                                <TouchableOpacity style={[s.actionBtn, { backgroundColor: colors.error }]} onPress={() => handleAdminAction('reject')}>
+                                    <Text style={s.actionBtnText}>✗ Reject Vehicle</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -424,92 +425,92 @@ export default function VehicleDetailScreen() {
 
                 {/* Booking Section – Date & Time Picker */}
                 {vehicle.vehicle_status === 'approved' && profile?.role !== 'admin' && !isOwner && !isMyVehicle && (
-                    <View style={styles.bookingSection}>
-                        <View style={styles.bookingHeader}>
-                            <Ionicons name="calendar" size={20} color={Colors.primary} />
-                            <Text style={styles.bookingSectionTitle}>Request to Book</Text>
+                    <View style={[s.bookingSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={s.bookingHeader}>
+                            <Ionicons name="calendar" size={20} color={colors.primary} />
+                            <Text style={[s.bookingSectionTitle, { color: colors.text }]}>Request to Book</Text>
                         </View>
-                        <Text style={styles.bookingSubtitle}>Select rental date & time for {vehicle.title}</Text>
+                        <Text style={[s.bookingSubtitle, { color: colors.textSecondary }]}>Select rental date & time for {vehicle.title}</Text>
 
                         {/* Pickup Date & Time */}
-                        <Text style={styles.fieldLabel}>Pickup Date & Time</Text>
-                        <View style={styles.dateTimeRow}>
-                            <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowStartDatePicker(true)}>
-                                <Ionicons name="calendar-outline" size={18} color={Colors.textSecondary} />
-                                <Text style={styles.datePickerText}>{format(startDate, 'dd MMM yyyy')}</Text>
-                                <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+                        <Text style={[s.fieldLabel, { color: colors.text }]}>Pickup Date & Time</Text>
+                        <View style={s.dateTimeRow}>
+                            <TouchableOpacity style={[s.datePickerBtn, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setShowStartDatePicker(true)}>
+                                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+                                <Text style={[s.datePickerText, { color: colors.text }]}>{format(startDate, 'dd MMM yyyy')}</Text>
+                                <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.timePickerBtn} onPress={() => setShowStartTimePicker(true)}>
-                                <Ionicons name="time-outline" size={18} color={Colors.textSecondary} />
-                                <Text style={styles.timePickerText}>{getTimeLabel(startHour)}</Text>
-                                <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+                            <TouchableOpacity style={[s.timePickerBtn, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setShowStartTimePicker(true)}>
+                                <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
+                                <Text style={[s.timePickerText, { color: colors.text }]}>{getTimeLabel(startHour)}</Text>
+                                <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
 
                         {/* Return Date & Time */}
-                        <Text style={styles.fieldLabel}>Return Date & Time</Text>
-                        <View style={styles.dateTimeRow}>
-                            <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowEndDatePicker(true)}>
-                                <Ionicons name="calendar-outline" size={18} color={Colors.textSecondary} />
-                                <Text style={styles.datePickerText}>{format(endDate, 'dd MMM yyyy')}</Text>
-                                <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+                        <Text style={[s.fieldLabel, { color: colors.text }]}>Return Date & Time</Text>
+                        <View style={s.dateTimeRow}>
+                            <TouchableOpacity style={[s.datePickerBtn, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setShowEndDatePicker(true)}>
+                                <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+                                <Text style={[s.datePickerText, { color: colors.text }]}>{format(endDate, 'dd MMM yyyy')}</Text>
+                                <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.timePickerBtn} onPress={() => setShowEndTimePicker(true)}>
-                                <Ionicons name="time-outline" size={18} color={Colors.textSecondary} />
-                                <Text style={styles.timePickerText}>{getTimeLabel(endHour)}</Text>
-                                <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+                            <TouchableOpacity style={[s.timePickerBtn, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setShowEndTimePicker(true)}>
+                                <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
+                                <Text style={[s.timePickerText, { color: colors.text }]}>{getTimeLabel(endHour)}</Text>
+                                <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
 
                         {/* Duration */}
-                        <View style={styles.durationBadge}>
-                            <Ionicons name="time" size={20} color={Colors.primary} />
-                            <Text style={styles.durationText}>{rentalHours} hour{rentalHours !== 1 ? 's' : ''}</Text>
+                        <View style={s.durationBadge}>
+                            <Ionicons name="time" size={20} color={colors.primary} />
+                            <Text style={[s.durationText, { color: colors.text }]}>{rentalHours} hour{rentalHours !== 1 ? 's' : ''}</Text>
                         </View>
 
                         {/* Price Breakdown */}
-                        <View style={styles.priceBreakdown}>
-                            <View style={styles.priceBreakdownRow}>
-                                <Text style={styles.priceBreakdownLabel}>₹{vehicle.price_per_day}/hr × {rentalHours} hour{rentalHours !== 1 ? 's' : ''}</Text>
-                                <Text style={styles.priceBreakdownValue}>₹{totalAmount.toLocaleString()}</Text>
+                        <View style={[s.priceBreakdown, { backgroundColor: colors.surface }]}>
+                            <View style={s.priceBreakdownRow}>
+                                <Text style={[s.priceBreakdownLabel, { color: colors.textSecondary }]}>₹{vehicle.price_per_day}/hr × {rentalHours} hour{rentalHours !== 1 ? 's' : ''}</Text>
+                                <Text style={[s.priceBreakdownValue, { color: colors.text }]}>₹{totalAmount.toLocaleString()}</Text>
                             </View>
-                            <View style={styles.priceDivider} />
-                            <View style={styles.priceBreakdownRow}>
-                                <Text style={styles.priceTotalLabel}>Total</Text>
-                                <Text style={styles.priceTotalValue}>₹{totalAmount.toLocaleString()}</Text>
+                            <View style={[s.priceDivider, { backgroundColor: colors.border }]} />
+                            <View style={s.priceBreakdownRow}>
+                                <Text style={[s.priceTotalLabel, { color: colors.text }]}>Total</Text>
+                                <Text style={[s.priceTotalValue, { color: colors.primary }]}>₹{totalAmount.toLocaleString()}</Text>
                             </View>
                         </View>
 
                         {/* Info Notes */}
-                        <View style={styles.infoNote}>
+                        <View style={s.infoNote}>
                             <Ionicons name="information-circle" size={18} color="#60a5fa" />
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.infoNoteTitle}>How it works</Text>
-                                <Text style={styles.infoNoteText}>The owner will review your request and respond within 24 hours. Payment will be collected after approval.</Text>
+                                <Text style={s.infoNoteTitle}>How it works</Text>
+                                <Text style={s.infoNoteText}>The owner will review your request and respond within 24 hours. Payment will be collected after approval.</Text>
                             </View>
                         </View>
 
-                        <View style={styles.depositNote}>
+                        <View style={s.depositNote}>
                             <Ionicons name="lock-closed" size={18} color="#fbbf24" />
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.depositNoteTitle}>Security Deposit</Text>
-                                <Text style={styles.depositNoteText}>A refundable security deposit (₹500-₹2000) will be collected in cash at pickup.</Text>
+                                <Text style={s.depositNoteTitle}>Security Deposit</Text>
+                                <Text style={s.depositNoteText}>A refundable security deposit (₹500-₹2000) will be collected in cash at pickup.</Text>
                             </View>
                         </View>
 
                         {/* Book Button */}
                         <TouchableOpacity
-                            style={[styles.bookButton, (bookingLoading || rentalHours < 1) && { opacity: 0.5 }]}
+                            style={[s.bookButton, { backgroundColor: colors.primary }, (bookingLoading || rentalHours < 1) && { opacity: 0.5 }]}
                             onPress={handleBooking}
                             disabled={bookingLoading || rentalHours < 1}
                         >
                             {bookingLoading ? (
-                                <ActivityIndicator color={Colors.white} />
+                                <ActivityIndicator color="#fff" />
                             ) : (
-                                <Text style={styles.bookButtonText}>Send Booking Request</Text>
+                                <Text style={s.bookButtonText}>Send Booking Request</Text>
                             )}
                         </TouchableOpacity>
-                        <Text style={styles.noChargeText}>🔒 You won't be charged yet</Text>
+                        <Text style={[s.noChargeText, { color: colors.textMuted }]}>🔒 You won't be charged yet</Text>
                     </View>
                 )}
 
@@ -525,70 +526,70 @@ export default function VehicleDetailScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: Colors.background },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+const s = StyleSheet.create({
+    container: { flex: 1 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     heroImage: { width: SCREEN_WIDTH, height: 280 },
-    noImage: { backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center' },
+    noImage: { justifyContent: 'center', alignItems: 'center' },
     dots: { flexDirection: 'row', justifyContent: 'center', paddingVertical: Spacing.md },
-    dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.border, marginHorizontal: 3 },
-    dotActive: { backgroundColor: Colors.primary, width: 20 },
-    errorText: { color: Colors.textMuted, fontSize: FontSize.md, marginTop: Spacing.md },
+    dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 3 },
+    dotActive: { width: 20 },
+    errorText: { fontSize: FontSize.md, marginTop: Spacing.md },
 
     // Info
     infoSection: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
     row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    title: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.text, flex: 1, marginRight: Spacing.sm },
+    title: { fontSize: FontSize.xxl, fontWeight: '800', flex: 1, marginRight: Spacing.sm },
     typeBadge: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
     typeBadgeText: { fontSize: FontSize.sm, fontWeight: '600' },
-    brandModel: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: Spacing.xs },
+    brandModel: { fontSize: FontSize.md, marginTop: Spacing.xs },
     priceRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: Spacing.lg },
-    price: { fontSize: FontSize.xxxl, fontWeight: '800', color: Colors.primary },
-    perHour: { fontSize: FontSize.md, color: Colors.textSecondary },
+    price: { fontSize: FontSize.xxxl, fontWeight: '800' },
+    perHour: { fontSize: FontSize.md },
     freeCancel: { fontSize: FontSize.sm, color: '#34d399', marginTop: Spacing.sm },
     detailsGrid: { marginTop: Spacing.xl, gap: Spacing.md },
     detailItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    detailText: { fontSize: FontSize.md, color: Colors.text },
+    detailText: { fontSize: FontSize.md },
     descSection: { marginTop: Spacing.xl },
-    sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, marginBottom: Spacing.md },
-    description: { fontSize: FontSize.md, color: Colors.textSecondary, lineHeight: 22 },
+    sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', marginBottom: Spacing.md },
+    description: { fontSize: FontSize.md, lineHeight: 22 },
 
     // Owner
-    ownerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, padding: Spacing.lg, marginTop: Spacing.xl },
-    ownerAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
-    ownerAvatarText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.lg },
-    ownerName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-    ownerSince: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
+    ownerCard: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.lg, marginTop: Spacing.xl },
+    ownerAvatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
+    ownerAvatarText: { color: '#fff', fontWeight: '700', fontSize: FontSize.lg },
+    ownerName: { fontSize: FontSize.md, fontWeight: '600' },
+    ownerSince: { fontSize: FontSize.xs, marginTop: 2 },
     verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,185,129,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(16,185,129,0.3)' },
     verifiedText: { fontSize: FontSize.xs, color: '#10b981', fontWeight: '600' },
 
     // Deposit
     depositCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: Radius.md, padding: Spacing.lg, marginTop: Spacing.xl, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' },
-    depositText: { flex: 1, fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 20 },
+    depositText: { flex: 1, fontSize: FontSize.sm, lineHeight: 20 },
 
     // Booking Section
-    bookingSection: { marginTop: Spacing.xxl, marginHorizontal: Spacing.xl, backgroundColor: Colors.card, borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border, padding: Spacing.xl },
+    bookingSection: { marginTop: Spacing.xxl, marginHorizontal: Spacing.xl, borderRadius: Radius.xl, borderWidth: 1, padding: Spacing.xl },
     bookingHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs },
-    bookingSectionTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
-    bookingSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.xl },
-    fieldLabel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text, marginBottom: Spacing.sm, marginTop: Spacing.md },
+    bookingSectionTitle: { fontSize: FontSize.xl, fontWeight: '700' },
+    bookingSubtitle: { fontSize: FontSize.sm, marginBottom: Spacing.xl },
+    fieldLabel: { fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm, marginTop: Spacing.md },
 
     dateTimeRow: { flexDirection: 'row', gap: Spacing.sm },
-    datePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 14 },
-    datePickerText: { flex: 1, fontSize: FontSize.sm, color: Colors.text, fontWeight: '500' },
-    timePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 14 },
-    timePickerText: { flex: 1, fontSize: FontSize.sm, color: Colors.text, fontWeight: '500' },
+    datePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 14 },
+    datePickerText: { flex: 1, fontSize: FontSize.sm, fontWeight: '500' },
+    timePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 14 },
+    timePickerText: { flex: 1, fontSize: FontSize.sm, fontWeight: '500' },
 
     durationBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingVertical: Spacing.md, marginTop: Spacing.lg },
-    durationText: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
+    durationText: { fontSize: FontSize.lg, fontWeight: '700' },
 
-    priceBreakdown: { backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.lg, marginTop: Spacing.sm },
+    priceBreakdown: { borderRadius: Radius.md, padding: Spacing.lg, marginTop: Spacing.sm },
     priceBreakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    priceBreakdownLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-    priceBreakdownValue: { fontSize: FontSize.sm, color: Colors.text },
-    priceDivider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.md },
-    priceTotalLabel: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
-    priceTotalValue: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.primary },
+    priceBreakdownLabel: { fontSize: FontSize.sm },
+    priceBreakdownValue: { fontSize: FontSize.sm },
+    priceDivider: { height: 1, marginVertical: Spacing.md },
+    priceTotalLabel: { fontSize: FontSize.md, fontWeight: '700' },
+    priceTotalValue: { fontSize: FontSize.xl, fontWeight: '800' },
 
     infoNote: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm, backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 1, borderColor: 'rgba(59,130,246,0.2)', borderRadius: Radius.md, padding: Spacing.md, marginTop: Spacing.lg },
     infoNoteTitle: { fontSize: FontSize.sm, fontWeight: '600', color: '#60a5fa' },
@@ -598,40 +599,36 @@ const styles = StyleSheet.create({
     depositNoteTitle: { fontSize: FontSize.sm, fontWeight: '600', color: '#fbbf24' },
     depositNoteText: { fontSize: FontSize.xs, color: 'rgba(251,191,36,0.8)', marginTop: 2, lineHeight: 18 },
 
-    bookButton: { backgroundColor: Colors.primary, borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.xl },
-    bookButtonText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
-    noChargeText: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
+    bookButton: { borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.xl },
+    bookButtonText: { color: '#fff', fontSize: FontSize.lg, fontWeight: '700' },
+    noChargeText: { fontSize: FontSize.xs, textAlign: 'center', marginTop: Spacing.sm },
 
     // Modals
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, maxHeight: '70%' },
+    modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, maxHeight: '70%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
-    modalTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text },
+    modalTitle: { fontSize: FontSize.xl, fontWeight: '700' },
 
     dateItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, borderRadius: Radius.md, marginBottom: Spacing.xs },
-    dateItemSelected: { backgroundColor: Colors.primary },
-    dateItemDay: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: 2 },
-    dateItemFull: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-    dateItemTextSelected: { color: Colors.white },
+    dateItemDay: { fontSize: FontSize.sm, marginBottom: 2 },
+    dateItemFull: { fontSize: FontSize.md, fontWeight: '600' },
 
     timeItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, borderRadius: Radius.md, marginBottom: Spacing.xs },
-    timeItemSelected: { backgroundColor: Colors.primary },
     timeItemLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-    timeItemText: { fontSize: FontSize.md, fontWeight: '500', color: Colors.text },
-    timeItemTextSelected: { color: Colors.white },
+    timeItemText: { fontSize: FontSize.md, fontWeight: '500' },
 
     // Admin Styles
-    section: { marginTop: Spacing.xl, paddingTop: Spacing.lg, borderTopWidth: 1, borderTopColor: Colors.border },
+    section: { marginTop: Spacing.xl, paddingTop: Spacing.lg, borderTopWidth: 1 },
     kycGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginTop: Spacing.md },
     kycItem: { width: '47%', marginBottom: Spacing.md },
-    kycLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, marginBottom: 4 },
-    kycImage: { width: '100%', height: 100, backgroundColor: Colors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
+    kycLabel: { fontSize: FontSize.xs, marginBottom: 4 },
+    kycImage: { width: '100%', height: 100, borderRadius: Radius.md, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
     adminActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg },
     statusBanner: { flexDirection: 'row', gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', marginBottom: Spacing.md },
     statusTitle: { fontSize: FontSize.md, fontWeight: '600', marginBottom: 2 },
-    statusDesc: { fontSize: FontSize.sm, color: Colors.textSecondary },
-    verifyButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.md },
-    verifyButtonText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '600' },
+    statusDesc: { fontSize: FontSize.sm },
+    verifyButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md },
+    verifyButtonText: { color: '#fff', fontSize: FontSize.md, fontWeight: '600' },
     actionBtn: { flex: 1, paddingVertical: 14, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-    actionBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
+    actionBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
 });

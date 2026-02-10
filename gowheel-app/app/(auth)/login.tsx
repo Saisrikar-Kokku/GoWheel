@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors, Spacing, FontSize, Radius } from '@/lib/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Spacing, FontSize, Radius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
@@ -14,6 +15,7 @@ export default function LoginScreen() {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const { signIn } = useAuth();
+    const { colors } = useTheme();
     const router = useRouter();
 
     const handleLogin = async () => {
@@ -30,29 +32,29 @@ export default function LoginScreen() {
     };
 
     return (
-        <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView style={[s.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
                 {/* Logo */}
-                <View style={styles.logoContainer}>
-                    <View style={styles.logoIcon}>
-                        <Ionicons name="car-sport" size={40} color={Colors.primary} />
+                <View style={s.logoContainer}>
+                    <View style={s.logoIcon}>
+                        <Ionicons name="car-sport" size={40} color={colors.primary} />
                     </View>
-                    <Text style={styles.logoText}>GoWheel</Text>
-                    <Text style={styles.tagline}>Rent vehicles peer-to-peer</Text>
+                    <Text style={[s.logoText, { color: colors.text }]}>GoWheel</Text>
+                    <Text style={[s.tagline, { color: colors.textSecondary }]}>Rent vehicles peer-to-peer</Text>
                 </View>
 
                 {/* Form */}
-                <View style={styles.form}>
-                    <Text style={styles.formTitle}>Welcome Back</Text>
+                <View style={s.form}>
+                    <Text style={[s.formTitle, { color: colors.text }]}>Welcome Back</Text>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Email</Text>
-                        <View style={styles.inputWrapper}>
-                            <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                    <View style={s.inputGroup}>
+                        <Text style={[s.label, { color: colors.textSecondary }]}>Email</Text>
+                        <View style={[s.inputWrapper, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                            <Ionicons name="mail-outline" size={20} color={colors.textMuted} style={s.inputIcon} />
                             <TextInput
-                                style={styles.input}
+                                style={[s.input, { color: colors.text }]}
                                 placeholder="Enter your email"
-                                placeholderTextColor={Colors.textMuted}
+                                placeholderTextColor={colors.textMuted}
                                 value={email}
                                 onChangeText={setEmail}
                                 autoCapitalize="none"
@@ -62,40 +64,40 @@ export default function LoginScreen() {
                         </View>
                     </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Password</Text>
-                        <View style={styles.inputWrapper}>
-                            <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                    <View style={s.inputGroup}>
+                        <Text style={[s.label, { color: colors.textSecondary }]}>Password</Text>
+                        <View style={[s.inputWrapper, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                            <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} style={s.inputIcon} />
                             <TextInput
-                                style={styles.input}
+                                style={[s.input, { color: colors.text }]}
                                 placeholder="Enter your password"
-                                placeholderTextColor={Colors.textMuted}
+                                placeholderTextColor={colors.textMuted}
                                 value={password}
                                 onChangeText={setPassword}
                                 secureTextEntry={!showPassword}
                                 autoComplete="password"
                             />
-                            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={Colors.textMuted} />
+                            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={s.eyeIcon}>
+                                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
+                    <TouchableOpacity style={[s.button, { backgroundColor: colors.primary }, loading && s.buttonDisabled]} onPress={handleLogin} disabled={loading}>
                         {loading ? (
-                            <ActivityIndicator color={Colors.white} />
+                            <ActivityIndicator color="#fff" />
                         ) : (
-                            <Text style={styles.buttonText}>Sign In</Text>
+                            <Text style={s.buttonText}>Sign In</Text>
                         )}
                     </TouchableOpacity>
                 </View>
 
                 {/* Sign up link */}
-                <View style={styles.footer}>
-                    <Text style={styles.footerText}>Don't have an account?</Text>
+                <View style={s.footer}>
+                    <Text style={[s.footerText, { color: colors.textSecondary }]}>Don't have an account?</Text>
                     <Link href="/(auth)/signup" asChild>
                         <TouchableOpacity>
-                            <Text style={styles.linkText}> Sign Up</Text>
+                            <Text style={[s.linkText, { color: colors.primary }]}> Sign Up</Text>
                         </TouchableOpacity>
                     </Link>
                 </View>
@@ -104,34 +106,34 @@ export default function LoginScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: Colors.background },
+const s = StyleSheet.create({
+    container: { flex: 1 },
     scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xxxl },
     logoContainer: { alignItems: 'center', marginBottom: Spacing.xxxl },
     logoIcon: {
         width: 80, height: 80, borderRadius: 24, backgroundColor: 'rgba(16, 185, 129, 0.15)',
         justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.md,
     },
-    logoText: { fontSize: FontSize.xxxl, fontWeight: '800', color: Colors.text, letterSpacing: -1 },
-    tagline: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.xs },
+    logoText: { fontSize: FontSize.xxxl, fontWeight: '800', letterSpacing: -1 },
+    tagline: { fontSize: FontSize.sm, marginTop: Spacing.xs },
     form: { marginBottom: Spacing.xxl },
-    formTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text, marginBottom: Spacing.xxl },
+    formTitle: { fontSize: FontSize.xxl, fontWeight: '700', marginBottom: Spacing.xxl },
     inputGroup: { marginBottom: Spacing.lg },
-    label: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.sm, fontWeight: '500' },
+    label: { fontSize: FontSize.sm, marginBottom: Spacing.sm, fontWeight: '500' },
     inputWrapper: {
-        flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
-        borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md,
+        flexDirection: 'row', alignItems: 'center',
+        borderWidth: 1, borderRadius: Radius.md,
     },
     inputIcon: { paddingLeft: Spacing.md },
-    input: { flex: 1, paddingHorizontal: Spacing.md, paddingVertical: 14, color: Colors.text, fontSize: FontSize.md },
+    input: { flex: 1, paddingHorizontal: Spacing.md, paddingVertical: 14, fontSize: FontSize.md },
     eyeIcon: { paddingRight: Spacing.md },
     button: {
-        backgroundColor: Colors.primary, borderRadius: Radius.md,
+        borderRadius: Radius.md,
         paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg,
     },
     buttonDisabled: { opacity: 0.6 },
-    buttonText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '600' },
+    buttonText: { color: '#fff', fontSize: FontSize.lg, fontWeight: '600' },
     footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-    footerText: { color: Colors.textSecondary, fontSize: FontSize.md },
-    linkText: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '600' },
+    footerText: { fontSize: FontSize.md },
+    linkText: { fontSize: FontSize.md, fontWeight: '600' },
 });

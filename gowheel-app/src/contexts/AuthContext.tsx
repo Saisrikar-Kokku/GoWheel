@@ -12,6 +12,7 @@ export interface Profile {
     is_blocked?: boolean;
     phone?: string;
     email?: string;
+    avatar_url?: string;
 }
 
 interface AuthContextType {

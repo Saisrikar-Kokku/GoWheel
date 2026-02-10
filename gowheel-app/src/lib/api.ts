@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://gowheel.vercel.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://go-wheel.vercel.app';
 
 /**
  * Call the website's Next.js API route with the user's auth token.
@@ -26,8 +26,9 @@ export async function apiCall<T>(
 
     // Call /api/ride/... by default for the ride API helpers
     // If the endpoint starts with /, use it as absolute path from base
+    const baseUrl = API_BASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
     const path = endpoint.startsWith('/') ? endpoint : `/api/ride/${endpoint}`;
-    const url = `${API_BASE_URL}${path}`;
+    const url = `${baseUrl}${path}`;
 
     console.log(`API Call: ${method} ${url}`);
 

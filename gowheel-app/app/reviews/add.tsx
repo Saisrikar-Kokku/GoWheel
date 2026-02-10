@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors, Spacing, FontSize, Radius, cardShadow } from '@/lib/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Spacing, FontSize, Radius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 
@@ -10,6 +11,7 @@ export default function AddReviewScreen() {
     const { bookingId, vehicleId, vehicleTitle } = useLocalSearchParams<{ bookingId: string; vehicleId: string; vehicleTitle: string }>();
     const router = useRouter();
     const { user } = useAuth();
+    const { colors } = useTheme();
 
     const [rating, setRating] = useState(0);
     const [comment, setComment] = useState('');
@@ -52,37 +54,37 @@ export default function AddReviewScreen() {
 
     return (
         <>
-            <Stack.Screen options={{ title: 'Write a Review', headerStyle: { backgroundColor: Colors.background }, headerTintColor: Colors.text }} />
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-                <ScrollView contentContainerStyle={styles.scroll}>
-                    <View style={styles.header}>
-                        <Text style={styles.title}>How was your ride?</Text>
-                        <Text style={styles.subtitle}>{vehicleTitle}</Text>
+            <Stack.Screen options={{ title: 'Write a Review', headerStyle: { backgroundColor: colors.background }, headerTintColor: colors.text }} />
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.container, { backgroundColor: colors.background }]}>
+                <ScrollView contentContainerStyle={s.scroll}>
+                    <View style={s.header}>
+                        <Text style={[s.title, { color: colors.text }]}>How was your ride?</Text>
+                        <Text style={[s.subtitle, { color: colors.textSecondary }]}>{vehicleTitle}</Text>
                     </View>
 
-                    <View style={styles.ratingContainer}>
+                    <View style={s.ratingContainer}>
                         {[1, 2, 3, 4, 5].map((star) => (
                             <TouchableOpacity key={star} onPress={() => setRating(star)}>
                                 <Ionicons
                                     name={star <= rating ? "star" : "star-outline"}
                                     size={40}
-                                    color={Colors.primary}
+                                    color={colors.primary}
                                 />
                             </TouchableOpacity>
                         ))}
                     </View>
-                    <Text style={styles.ratingText}>
+                    <Text style={[s.ratingText, { color: colors.primary }]}>
                         {rating === 1 ? 'Poor' : rating === 2 ? 'Fair' : rating === 3 ? 'Good' : rating === 4 ? 'Very Good' : rating === 5 ? 'Excellent' : 'Select a rating'}
                     </Text>
 
-                    <View style={styles.inputContainer}>
-                        <Text style={styles.label}>Your Review</Text>
+                    <View style={s.inputContainer}>
+                        <Text style={[s.label, { color: colors.textSecondary }]}>Your Review</Text>
                         <TextInput
-                            style={styles.input}
+                            style={[s.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                             value={comment}
                             onChangeText={setComment}
                             placeholder="Tell us about your experience..."
-                            placeholderTextColor={Colors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             multiline
                             numberOfLines={5}
                             textAlignVertical="top"
@@ -90,14 +92,14 @@ export default function AddReviewScreen() {
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.submitButton, loading && styles.disabledButton]}
+                        style={[s.submitButton, { backgroundColor: colors.primary }, loading && s.disabledButton]}
                         onPress={handleSubmit}
                         disabled={loading}
                     >
                         {loading ? (
-                            <ActivityIndicator color={Colors.white} />
+                            <ActivityIndicator color={'#fff'} />
                         ) : (
-                            <Text style={styles.submitText}>Submit Review</Text>
+                            <Text style={[s.submitText, { color: '#fff' }]}>Submit Review</Text>
                         )}
                     </TouchableOpacity>
                 </ScrollView>
@@ -106,18 +108,18 @@ export default function AddReviewScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: Colors.background },
+const s = StyleSheet.create({
+    container: { flex: 1 },
     scroll: { padding: Spacing.xl },
     header: { alignItems: 'center', marginBottom: Spacing.xl },
-    title: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text, marginBottom: Spacing.xs },
-    subtitle: { fontSize: FontSize.md, color: Colors.textSecondary },
+    title: { fontSize: FontSize.xl, fontWeight: '700', marginBottom: Spacing.xs },
+    subtitle: { fontSize: FontSize.md },
     ratingContainer: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.md, marginBottom: Spacing.sm },
-    ratingText: { textAlign: 'center', fontSize: FontSize.md, color: Colors.primary, fontWeight: '600', marginBottom: Spacing.xl },
+    ratingText: { textAlign: 'center', fontSize: FontSize.md, fontWeight: '600', marginBottom: Spacing.xl },
     inputContainer: { marginBottom: Spacing.xl },
-    label: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.xs, fontWeight: '500' },
-    input: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: Spacing.md, color: Colors.text, fontSize: FontSize.md, minHeight: 120 },
-    submitButton: { backgroundColor: Colors.primary, borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center' },
+    label: { fontSize: FontSize.sm, marginBottom: Spacing.xs, fontWeight: '500' },
+    input: { borderWidth: 1, borderRadius: Radius.md, padding: Spacing.md, fontSize: FontSize.md, minHeight: 120 },
+    submitButton: { borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center' },
     disabledButton: { opacity: 0.7 },
-    submitText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '600' },
+    submitText: { fontSize: FontSize.lg, fontWeight: '600' },
 });

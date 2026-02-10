@@ -13,6 +13,8 @@ export interface Vehicle {
     year: number;
     price_per_day: number;
     location: string;
+    latitude?: number;
+    longitude?: number;
     description: string | null;
     is_active: boolean;
     created_at: string;
@@ -53,6 +55,8 @@ export interface VehicleFormData {
     year: number;
     price_per_day: number;
     location: string;
+    latitude?: number;
+    longitude?: number;
     description: string;
     is_active: boolean;
     registration_number?: string;

@@ -40,6 +40,13 @@
           "cameraPermission": "GoWheel needs access to your camera for vehicle and ride inspection images."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "GoWheel needs your location to set the vehicle pickup point.",
+          "locationWhenInUsePermission": "GoWheel needs your location to set the vehicle pickup point."
+        }
+      ],
       "expo-asset"
     ],
     "extra": {

@@ -3,14 +3,16 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { Colors } from '@/lib/theme';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 function AuthGate() {
-    const { user, loading, profile } = useAuth();
+    const { user, loading } = useAuth();
+    const { colors, isDark } = useTheme();
     const segments = useSegments();
     const router = useRouter();
 
@@ -31,21 +33,29 @@ function AuthGate() {
 
     if (loading) {
         return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+            <View style={[styles.loading, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
             </View>
         );
     }
 
-    return <Slot />;
+    return (
+        <>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+            <Slot />
+        </>
+    );
 }
 
 export default function RootLayout() {
     return (
-        <AuthProvider>
-            <StatusBar style="light" />
-            <AuthGate />
-        </AuthProvider>
+        <ThemeProvider>
+            <AuthProvider>
+                <NotificationProvider>
+                    <AuthGate />
+                </NotificationProvider>
+            </AuthProvider>
+        </ThemeProvider>
     );
 }
 
@@ -54,6 +64,5 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: Colors.background,
     },
 });

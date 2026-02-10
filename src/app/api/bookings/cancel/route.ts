@@ -94,9 +94,11 @@ export async function POST(request: NextRequest) {
         // 1. Authenticate User
         const authHeader = request.headers.get('Authorization');
         let authClient;
+        let accessToken: string | undefined;
 
         if (authHeader) {
             // Mobile app request with Bearer token
+            accessToken = authHeader.replace('Bearer ', '');
             authClient = createClient(supabaseUrl, supabaseAnonKey, {
                 global: { headers: { Authorization: authHeader } }
             });
@@ -115,7 +117,8 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const { data: { user } } = await authClient.auth.getUser();
+        // Pass token explicitly for mobile requests
+        const { data: { user } } = await authClient.auth.getUser(accessToken);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

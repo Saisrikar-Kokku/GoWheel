@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-    ActivityIndicator, Alert, RefreshControl, TextInput, Modal,
+    ActivityIndicator, Alert, RefreshControl, TextInput, Modal, Platform, Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors, Spacing, FontSize, Radius, cardShadow } from '@/lib/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Spacing, FontSize, Radius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { approveBooking, rejectBooking } from '@/services/bookingService';
@@ -17,12 +18,12 @@ import { rideApi } from '@/lib/api';
 // ===============================
 // STATUS CONFIGURATION
 // ===============================
-const statusConfig: Record<BookingStatus, { color: string; icon: string; label: string }> = {
-    requested: { color: Colors.warning, icon: 'time', label: 'Requested' },
-    approved: { color: '#3b82f6', icon: 'checkmark-circle', label: 'Approved' },
-    confirmed: { color: Colors.success, icon: 'checkmark-done-circle', label: 'Confirmed' },
-    rejected: { color: Colors.error, icon: 'close-circle', label: 'Rejected' },
-    cancelled: { color: Colors.textMuted, icon: 'ban', label: 'Cancelled' },
+const STATUS_META: Record<BookingStatus, { icon: string; label: string }> = {
+    requested: { icon: 'time', label: 'Requested' },
+    approved: { icon: 'checkmark-circle', label: 'Approved' },
+    confirmed: { icon: 'checkmark-done-circle', label: 'Confirmed' },
+    rejected: { icon: 'close-circle', label: 'Rejected' },
+    cancelled: { icon: 'ban', label: 'Cancelled' },
 };
 
 const paymentMethods: { key: PaymentMethod; label: string; icon: string }[] = [
@@ -35,6 +36,7 @@ const paymentMethods: { key: PaymentMethod; label: string; icon: string }[] = [
 export default function BookingDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { profile, user } = useAuth();
+    const { colors, shadow } = useTheme();
     const router = useRouter();
     const isOwner = profile?.role === 'owner';
 
@@ -53,6 +55,17 @@ export default function BookingDetailScreen() {
     const [paymentModalVisible, setPaymentModalVisible] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
 
+    const getStatusColor = (status: BookingStatus) => {
+        const map: Record<BookingStatus, string> = {
+            requested: colors.warning,
+            approved: '#3b82f6',
+            confirmed: colors.success,
+            rejected: colors.error,
+            cancelled: colors.textMuted,
+        };
+        return map[status];
+    };
+
     // ===============================
     // DATA LOADING
     // ===============================
@@ -63,7 +76,7 @@ export default function BookingDetailScreen() {
 
         const { data: vehicle } = await supabase
             .from('vehicles')
-            .select('id, title, brand, model, vehicle_type, price_per_day, location, registration_number')
+            .select('id, title, brand, model, vehicle_type, price_per_day, location, latitude, longitude, registration_number')
             .eq('id', data.vehicle_id).single();
 
         let images: any[] = [];
@@ -231,7 +244,6 @@ export default function BookingDetailScreen() {
         }
         setActionLoading(true);
         try {
-            // Update booking with payment info
             const { error } = await supabase.from('bookings').update({
                 payment_method: selectedPaymentMethod,
                 payment_status: 'pending',
@@ -279,10 +291,11 @@ export default function BookingDetailScreen() {
     // ===============================
     // RENDER
     // ===============================
-    if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
-    if (!booking) return <View style={styles.center}><Text style={styles.emptyText}>Booking not found</Text></View>;
+    if (loading) return <View style={[s.center, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.primary} /></View>;
+    if (!booking) return <View style={[s.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.textMuted, fontSize: FontSize.md }}>Booking not found</Text></View>;
 
-    const sc = statusConfig[booking.status];
+    const sc = getStatusColor(booking.status);
+    const meta = STATUS_META[booking.status];
     const primaryImage = booking.vehicle?.images?.[0];
     const canChat = isChatEnabled(booking.status);
     const startDate = new Date(booking.start_date);
@@ -298,39 +311,57 @@ export default function BookingDetailScreen() {
         <>
             <Stack.Screen options={{
                 title: 'Booking Details',
-                headerStyle: { backgroundColor: Colors.background },
-                headerTintColor: Colors.text,
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
             }} />
 
             <ScrollView
-                style={styles.container}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+                style={{ flex: 1, backgroundColor: colors.background }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
             >
                 {/* Vehicle Card */}
-                <View style={styles.vehicleCard}>
+                <View style={[s.vehicleCard, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
                     {primaryImage ? (
-                        <Image source={{ uri: primaryImage.image_url }} style={styles.vehicleImage} />
+                        <Image source={{ uri: primaryImage.image_url }} style={s.vehicleImage} />
                     ) : (
-                        <View style={[styles.vehicleImage, styles.noImage]}>
-                            <Ionicons name="car" size={40} color={Colors.textMuted} />
+                        <View style={[s.vehicleImage, s.noImage, { backgroundColor: colors.surface }]}>
+                            <Ionicons name="car" size={40} color={colors.textMuted} />
                         </View>
                     )}
-                    <View style={styles.vehicleInfo}>
-                        <Text style={styles.vehicleTitle}>{booking.vehicle?.title || 'Vehicle'}</Text>
-                        <Text style={styles.vehicleSub}>{booking.vehicle?.brand} {booking.vehicle?.model}</Text>
-                        <Text style={styles.vehicleSub}>
+                    <View style={s.vehicleInfo}>
+                        <Text style={[s.vehicleTitle, { color: colors.text }]}>{booking.vehicle?.title || 'Vehicle'}</Text>
+                        <Text style={[s.vehicleSub, { color: colors.textSecondary }]}>{booking.vehicle?.brand} {booking.vehicle?.model}</Text>
+                        <Text style={[s.vehicleSub, { color: colors.textSecondary }]}>
                             {format(startDate, 'MMM d, h:mm a')} → {format(endDate, 'MMM d, h:mm a')}
                         </Text>
+                        {booking.status === 'confirmed' && booking.vehicle?.latitude && booking.vehicle?.longitude && (
+                            <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 4 }}
+                                onPress={() => {
+                                    const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
+                                    const latLng = `${booking.vehicle?.latitude},${booking.vehicle?.longitude}`;
+                                    const label = booking.vehicle?.title;
+                                    const url = Platform.select({
+                                        ios: `${scheme}${label}@${latLng}`,
+                                        android: `${scheme}${latLng}(${label})`
+                                    });
+                                    if (url) Linking.openURL(url);
+                                }}
+                            >
+                                <Ionicons name="navigate-circle" size={18} color={colors.primary} />
+                                <Text style={{ color: colors.primary, fontWeight: '600', fontSize: FontSize.sm }}>Get Directions</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
 
                 {/* Status Banner */}
-                <View style={styles.section}>
-                    <View style={[styles.statusBanner, { backgroundColor: `${sc.color}15`, borderColor: sc.color }]}>
-                        <Ionicons name={sc.icon as any} size={28} color={sc.color} />
+                <View style={s.section}>
+                    <View style={[s.statusBanner, { backgroundColor: `${sc}15`, borderColor: sc }]}>
+                        <Ionicons name={meta.icon as any} size={28} color={sc} />
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.statusLabel, { color: sc.color }]}>{sc.label}</Text>
-                            <Text style={styles.statusSubText}>
+                            <Text style={[s.statusLabel, { color: sc }]}>{meta.label}</Text>
+                            <Text style={[s.statusSubText, { color: colors.textSecondary }]}>
                                 {booking.status === 'requested' && '⏳ Waiting for owner approval'}
                                 {booking.status === 'approved' && booking.payment_status === 'not_started' && '✅ Approved! Complete payment to confirm.'}
                                 {isPendingPayment && '⏳ Payment submitted. Waiting for owner to confirm.'}
@@ -343,69 +374,67 @@ export default function BookingDetailScreen() {
                 </View>
 
                 {/* Booking Details */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Booking Details</Text>
-                    <View style={styles.detailsCard}>
+                <View style={s.section}>
+                    <Text style={[s.sectionTitle, { color: colors.text }]}>Booking Details</Text>
+                    <View style={[s.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         {[
                             { icon: 'time', label: 'Duration', value: `${hours} hour${hours !== 1 ? 's' : ''}` },
                             { icon: 'cash', label: 'Total Amount', value: `₹${booking.total_amount.toLocaleString()}` },
                             { icon: 'card', label: 'Payment', value: booking.payment_status.replace('_', ' ').toUpperCase() },
                             ...(booking.ride_status ? [{ icon: 'bicycle', label: 'Ride Status', value: booking.ride_status.replace('_', ' ').toUpperCase() }] : []),
                         ].map((detail, idx) => (
-                            <View key={idx} style={[styles.detailRow, idx > 0 && styles.detailBorder]}>
-                                <View style={styles.detailLeft}>
-                                    <Ionicons name={detail.icon as any} size={18} color={Colors.textMuted} />
-                                    <Text style={styles.detailLabel}>{detail.label}</Text>
+                            <View key={idx} style={[s.detailRow, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                                <View style={s.detailLeft}>
+                                    <Ionicons name={detail.icon as any} size={18} color={colors.textMuted} />
+                                    <Text style={[s.detailLabel, { color: colors.textSecondary }]}>{detail.label}</Text>
                                 </View>
-                                <Text style={styles.detailValue}>{detail.value}</Text>
+                                <Text style={[s.detailValue, { color: colors.text }]}>{detail.value}</Text>
                             </View>
                         ))}
                     </View>
                 </View>
 
                 {/* Person Info Card */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>{isOwner ? 'Renter' : 'Owner'}</Text>
-                    <View style={styles.personCard}>
-                        <View style={styles.personAvatar}>
-                            <Text style={styles.personAvatarText}>
+                <View style={s.section}>
+                    <Text style={[s.sectionTitle, { color: colors.text }]}>{isOwner ? 'Renter' : 'Owner'}</Text>
+                    <View style={[s.personCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={[s.personAvatar, { backgroundColor: colors.primary }]}>
+                            <Text style={s.personAvatarText}>
                                 {(isOwner ? booking.renter?.full_name : booking.owner?.full_name)?.charAt(0) || '?'}
                             </Text>
                         </View>
                         <View>
-                            <Text style={styles.personName}>
+                            <Text style={[s.personName, { color: colors.text }]}>
                                 {isOwner ? booking.renter?.full_name : booking.owner?.full_name}
                             </Text>
                             {isOwner && booking.renter?.phone && (
-                                <Text style={styles.personSub}>📱 {booking.renter.phone}</Text>
+                                <Text style={[s.personSub, { color: colors.textSecondary }]}>📱 {booking.renter.phone}</Text>
                             )}
                         </View>
                     </View>
                 </View>
 
-                {/* ============================================ */}
                 {/* RENTER: PAYMENT SECTION */}
-                {/* ============================================ */}
                 {canPay && (
-                    <View style={styles.section}>
+                    <View style={s.section}>
                         <TouchableOpacity
-                            style={styles.payButton}
+                            style={[s.payButton, { backgroundColor: colors.primary }]}
                             onPress={() => setPaymentModalVisible(true)}
                         >
-                            <Ionicons name="card" size={20} color={Colors.white} />
-                            <Text style={styles.payButtonText}>Pay ₹{booking.total_amount.toLocaleString()}</Text>
+                            <Ionicons name="card" size={20} color="#fff" />
+                            <Text style={s.payButtonText}>Pay ₹{booking.total_amount.toLocaleString()}</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
                 {/* Payment Pending Status (Renter) */}
                 {isPendingPayment && !isOwner && (
-                    <View style={styles.section}>
-                        <View style={styles.infoCard}>
-                            <Ionicons name="time" size={20} color={Colors.warning} />
+                    <View style={s.section}>
+                        <View style={[s.infoCard, { backgroundColor: `${colors.warning}10`, borderColor: colors.warning }]}>
+                            <Ionicons name="time" size={20} color={colors.warning} />
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.infoCardTitle}>Payment Pending Confirmation</Text>
-                                <Text style={styles.infoCardSub}>
+                                <Text style={[s.infoCardTitle, { color: colors.warning }]}>Payment Pending Confirmation</Text>
+                                <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                     {booking.payment_method && `Paying via ${booking.payment_method.toUpperCase()} • `}
                                     Waiting for owner to verify
                                 </Text>
@@ -414,27 +443,25 @@ export default function BookingDetailScreen() {
                     </View>
                 )}
 
-                {/* ============================================ */}
                 {/* OWNER: PAYMENT CONFIRMATION */}
-                {/* ============================================ */}
                 {isOwner && booking.status === 'approved' && booking.payment_status === 'pending' && booking.payment_method && (
-                    <View style={styles.section}>
-                        <View style={[styles.infoCard, { borderColor: Colors.success }]}>
-                            <Ionicons name="card" size={20} color={Colors.success} />
+                    <View style={s.section}>
+                        <View style={[s.infoCard, { backgroundColor: `${colors.success}10`, borderColor: colors.success }]}>
+                            <Ionicons name="card" size={20} color={colors.success} />
                             <View style={{ flex: 1 }}>
-                                <Text style={[styles.infoCardTitle, { color: Colors.success }]}>Payment Received?</Text>
-                                <Text style={styles.infoCardSub}>
+                                <Text style={[s.infoCardTitle, { color: colors.success }]}>Payment Received?</Text>
+                                <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                     Renter is paying via {booking.payment_method.toUpperCase()} — ₹{booking.total_amount}
                                 </Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            style={[styles.payButton, { backgroundColor: Colors.success, marginTop: Spacing.sm }]}
+                            style={[s.payButton, { backgroundColor: colors.success, marginTop: Spacing.sm }]}
                             onPress={handleConfirmPayment}
                             disabled={actionLoading}
                         >
-                            <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-                            <Text style={styles.payButtonText}>
+                            <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                            <Text style={s.payButtonText}>
                                 {actionLoading ? 'Confirming...' : 'Confirm Payment Received'}
                             </Text>
                         </TouchableOpacity>
@@ -443,12 +470,12 @@ export default function BookingDetailScreen() {
 
                 {/* Owner: Waiting for renter payment */}
                 {isOwner && booking.status === 'approved' && (!booking.payment_status || booking.payment_status === 'not_started') && (
-                    <View style={styles.section}>
-                        <View style={styles.infoCard}>
-                            <Ionicons name="time" size={20} color={Colors.warning} />
+                    <View style={s.section}>
+                        <View style={[s.infoCard, { backgroundColor: `${colors.warning}10`, borderColor: colors.warning }]}>
+                            <Ionicons name="time" size={20} color={colors.warning} />
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.infoCardTitle}>Waiting for Renter Payment</Text>
-                                <Text style={styles.infoCardSub}>
+                                <Text style={[s.infoCardTitle, { color: colors.warning }]}>Waiting for Renter Payment</Text>
+                                <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                     You've approved this booking. The renter needs to complete payment.
                                 </Text>
                             </View>
@@ -456,37 +483,35 @@ export default function BookingDetailScreen() {
                     </View>
                 )}
 
-                {/* ============================================ */}
                 {/* RIDE VERIFICATION SECTION */}
-                {/* ============================================ */}
                 {isConfirmed && (
-                    <View style={styles.section}>
-                        <View style={styles.rideHeader}>
-                            <Ionicons name="shield-checkmark" size={22} color={Colors.primary} />
-                            <Text style={styles.rideHeaderText}>Ride Verification</Text>
+                    <View style={s.section}>
+                        <View style={s.rideHeader}>
+                            <Ionicons name="shield-checkmark" size={22} color={colors.primary} />
+                            <Text style={[s.rideHeaderText, { color: colors.primary }]}>Ride Verification</Text>
                         </View>
 
                         {/* Step 1: Renter uploads inspection photos */}
                         {(!booking.ride_status || booking.ride_status === 'pending') && (
                             <>
                                 {!isOwner ? (
-                                    <View style={styles.stepCard}>
-                                        <View style={styles.stepBadge}>
-                                            <Text style={styles.stepBadgeText}>1</Text>
+                                    <View style={[s.stepCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <View style={[s.stepBadge, { backgroundColor: `${colors.primary}30` }]}>
+                                            <Text style={[s.stepBadgeText, { color: colors.primary }]}>1</Text>
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={styles.stepTitle}>Upload Inspection Photos</Text>
-                                            <Text style={styles.stepSub}>
+                                            <Text style={[s.stepTitle, { color: colors.text }]}>Upload Inspection Photos</Text>
+                                            <Text style={[s.stepSub, { color: colors.textSecondary }]}>
                                                 Upload photos of the vehicle before starting your ride
                                             </Text>
                                         </View>
                                     </View>
                                 ) : (
-                                    <View style={styles.infoCard}>
-                                        <Ionicons name="time" size={20} color={Colors.warning} />
+                                    <View style={[s.infoCard, { backgroundColor: `${colors.warning}10`, borderColor: colors.warning }]}>
+                                        <Ionicons name="time" size={20} color={colors.warning} />
                                         <View style={{ flex: 1 }}>
-                                            <Text style={styles.infoCardTitle}>Waiting for Renter</Text>
-                                            <Text style={styles.infoCardSub}>
+                                            <Text style={[s.infoCardTitle, { color: colors.warning }]}>Waiting for Renter</Text>
+                                            <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                                 The renter needs to upload inspection photos before you can generate the Start OTP.
                                             </Text>
                                         </View>
@@ -494,68 +519,68 @@ export default function BookingDetailScreen() {
                                 )}
                                 {!isOwner && (
                                     <TouchableOpacity
-                                        style={styles.inspectionButton}
+                                        style={[s.inspectionButton, { borderColor: colors.warning }]}
                                         onPress={() => router.push({ pathname: '/ride/inspection', params: { bookingId: booking.id } })}
                                     >
-                                        <Ionicons name="camera" size={20} color={Colors.warning} />
-                                        <Text style={[styles.inspectionBtnText, { color: Colors.warning }]}>📷 Upload Inspection Photos</Text>
+                                        <Ionicons name="camera" size={20} color={colors.warning} />
+                                        <Text style={[s.inspectionBtnText, { color: colors.warning }]}>📷 Upload Inspection Photos</Text>
                                     </TouchableOpacity>
                                 )}
                             </>
                         )}
 
-                        {/* Step 2: Photos uploaded → Owner generates Start OTP / Renter waits then enters OTP */}
+                        {/* Step 2: Photos uploaded → Owner generates Start OTP / Renter waits */}
                         {booking.ride_status === 'photos_uploaded' && (
                             <>
                                 {isOwner ? (
                                     <>
-                                        <View style={[styles.infoCard, { borderColor: Colors.success }]}>
-                                            <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+                                        <View style={[s.infoCard, { backgroundColor: `${colors.success}10`, borderColor: colors.success }]}>
+                                            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
                                             <View style={{ flex: 1 }}>
-                                                <Text style={[styles.infoCardTitle, { color: Colors.success }]}>
+                                                <Text style={[s.infoCardTitle, { color: colors.success }]}>
                                                     ✅ Inspection Photos Received
                                                 </Text>
-                                                <Text style={styles.infoCardSub}>
+                                                <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                                     Renter has uploaded vehicle inspection photos. Generate the Start OTP to begin the ride.
                                                 </Text>
                                             </View>
                                         </View>
                                         <TouchableOpacity
-                                            style={[styles.gradientButton, { backgroundColor: '#f59e0b' }]}
+                                            style={[s.gradientButton, { backgroundColor: '#f59e0b' }]}
                                             onPress={() => handleGenerateOTP('start')}
                                             disabled={actionLoading}
                                         >
-                                            <Ionicons name="key" size={20} color={Colors.white} />
-                                            <Text style={styles.gradientBtnText}>
+                                            <Ionicons name="key" size={20} color="#fff" />
+                                            <Text style={s.gradientBtnText}>
                                                 {actionLoading ? 'Generating...' : '🔑 Generate Start OTP'}
                                             </Text>
                                         </TouchableOpacity>
                                     </>
                                 ) : (
                                     <>
-                                        <View style={styles.stepCard}>
-                                            <View style={styles.stepBadge}>
-                                                <Text style={styles.stepBadgeText}>2</Text>
+                                        <View style={[s.stepCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                            <View style={[s.stepBadge, { backgroundColor: `${colors.primary}30` }]}>
+                                                <Text style={[s.stepBadgeText, { color: colors.primary }]}>2</Text>
                                             </View>
                                             <View style={{ flex: 1 }}>
-                                                <Text style={styles.stepTitle}>✅ Photos uploaded!</Text>
-                                                <Text style={styles.stepSub}>
+                                                <Text style={[s.stepTitle, { color: colors.text }]}>✅ Photos uploaded!</Text>
+                                                <Text style={[s.stepSub, { color: colors.textSecondary }]}>
                                                     Wait for the owner to generate your Start OTP
                                                 </Text>
                                             </View>
                                         </View>
-                                        <View style={[styles.infoCard, { borderColor: Colors.warning }]}>
-                                            <Ionicons name="phone-portrait" size={18} color={Colors.warning} />
-                                            <Text style={[styles.infoCardSub, { flex: 1 }]}>
+                                        <View style={[s.infoCard, { backgroundColor: `${colors.warning}10`, borderColor: colors.warning }]}>
+                                            <Ionicons name="phone-portrait" size={18} color={colors.warning} />
+                                            <Text style={[s.infoCardSub, { flex: 1, color: colors.textSecondary }]}>
                                                 📱 The owner will generate an OTP and you'll receive it via email. Enter it below to start your ride.
                                             </Text>
                                         </View>
                                         <TouchableOpacity
-                                            style={styles.gradientButton}
+                                            style={[s.gradientButton, { backgroundColor: colors.primary }]}
                                             onPress={() => { setOtpType('start'); setOtpInput(''); setOtpModalVisible(true); }}
                                         >
-                                            <Ionicons name="lock-open" size={20} color={Colors.white} />
-                                            <Text style={styles.gradientBtnText}>🔑 Enter Start OTP</Text>
+                                            <Ionicons name="lock-open" size={20} color="#fff" />
+                                            <Text style={s.gradientBtnText}>🔑 Enter Start OTP</Text>
                                         </TouchableOpacity>
                                     </>
                                 )}
@@ -565,11 +590,11 @@ export default function BookingDetailScreen() {
                         {/* Step 3: Ride in Progress */}
                         {booking.ride_status === 'started' && (
                             <>
-                                <View style={[styles.infoCard, { borderColor: Colors.success, backgroundColor: `${Colors.success}10` }]}>
-                                    <Ionicons name="flash" size={20} color={Colors.success} />
+                                <View style={[s.infoCard, { borderColor: colors.success, backgroundColor: `${colors.success}10` }]}>
+                                    <Ionicons name="flash" size={20} color={colors.success} />
                                     <View style={{ flex: 1 }}>
-                                        <Text style={[styles.infoCardTitle, { color: Colors.success }]}>🏍️ Ride in Progress!</Text>
-                                        <Text style={styles.infoCardSub}>
+                                        <Text style={[s.infoCardTitle, { color: colors.success }]}>🏍️ Ride in Progress!</Text>
+                                        <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                             {isOwner
                                                 ? 'When the renter returns the vehicle, generate the End OTP to complete the booking.'
                                                 : "Enjoy your ride! When you're done, the owner will generate an End OTP to complete the booking."
@@ -579,9 +604,9 @@ export default function BookingDetailScreen() {
                                 </View>
 
                                 {booking.ride_started_at && (
-                                    <View style={styles.rideTimeCard}>
-                                        <Ionicons name="flag" size={16} color={Colors.success} />
-                                        <Text style={styles.rideTimeText}>
+                                    <View style={[s.rideTimeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <Ionicons name="flag" size={16} color={colors.success} />
+                                        <Text style={[s.rideTimeText, { color: colors.text }]}>
                                             Started: {format(new Date(booking.ride_started_at), 'MMM dd, h:mm a')}
                                         </Text>
                                     </View>
@@ -589,22 +614,22 @@ export default function BookingDetailScreen() {
 
                                 {isOwner ? (
                                     <TouchableOpacity
-                                        style={[styles.gradientButton, { backgroundColor: '#3b82f6' }]}
+                                        style={[s.gradientButton, { backgroundColor: '#3b82f6' }]}
                                         onPress={() => handleGenerateOTP('end')}
                                         disabled={actionLoading}
                                     >
-                                        <Ionicons name="key" size={20} color={Colors.white} />
-                                        <Text style={styles.gradientBtnText}>
+                                        <Ionicons name="key" size={20} color="#fff" />
+                                        <Text style={s.gradientBtnText}>
                                             {actionLoading ? 'Generating...' : '🏁 Generate End OTP'}
                                         </Text>
                                     </TouchableOpacity>
                                 ) : (
                                     <TouchableOpacity
-                                        style={[styles.gradientButton, { backgroundColor: '#3b82f6' }]}
+                                        style={[s.gradientButton, { backgroundColor: '#3b82f6' }]}
                                         onPress={() => { setOtpType('end'); setOtpInput(''); setOtpModalVisible(true); }}
                                     >
-                                        <Ionicons name="lock-open" size={20} color={Colors.white} />
-                                        <Text style={styles.gradientBtnText}>🏁 Enter End OTP to Complete Ride</Text>
+                                        <Ionicons name="lock-open" size={20} color="#fff" />
+                                        <Text style={s.gradientBtnText}>🏁 Enter End OTP to Complete Ride</Text>
                                     </TouchableOpacity>
                                 )}
                             </>
@@ -613,13 +638,13 @@ export default function BookingDetailScreen() {
                         {/* Step 4: Ride Completed */}
                         {booking.ride_status === 'completed' && (
                             <>
-                                <View style={[styles.infoCard, { borderColor: Colors.success, backgroundColor: `${Colors.success}10` }]}>
-                                    <Ionicons name="checkmark-done-circle" size={22} color={Colors.success} />
+                                <View style={[s.infoCard, { borderColor: colors.success, backgroundColor: `${colors.success}10` }]}>
+                                    <Ionicons name="checkmark-done-circle" size={22} color={colors.success} />
                                     <View style={{ flex: 1 }}>
-                                        <Text style={[styles.infoCardTitle, { color: Colors.success }]}>
+                                        <Text style={[s.infoCardTitle, { color: colors.success }]}>
                                             ✅ Ride Completed Successfully!
                                         </Text>
-                                        <Text style={styles.infoCardSub}>
+                                        <Text style={[s.infoCardSub, { color: colors.textSecondary }]}>
                                             {isOwner
                                                 ? 'This booking has been completed. Payment will be processed to your account.'
                                                 : 'Thank you for using GoWheel! We hope you had a great ride.'}
@@ -627,24 +652,24 @@ export default function BookingDetailScreen() {
                                     </View>
                                 </View>
                                 {booking.ride_started_at && (
-                                    <View style={styles.rideTimeCard}>
-                                        <Ionicons name="flag" size={16} color={Colors.success} />
-                                        <Text style={styles.rideTimeText}>
+                                    <View style={[s.rideTimeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <Ionicons name="flag" size={16} color={colors.success} />
+                                        <Text style={[s.rideTimeText, { color: colors.text }]}>
                                             Started: {format(new Date(booking.ride_started_at), 'MMM dd, h:mm a')}
                                         </Text>
                                     </View>
                                 )}
                                 {booking.ride_ended_at && (
-                                    <View style={styles.rideTimeCard}>
-                                        <Ionicons name="checkmark-done" size={16} color={Colors.primary} />
-                                        <Text style={styles.rideTimeText}>
+                                    <View style={[s.rideTimeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                        <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+                                        <Text style={[s.rideTimeText, { color: colors.text }]}>
                                             Ended: {format(new Date(booking.ride_ended_at), 'MMM dd, h:mm a')}
                                         </Text>
                                     </View>
                                 )}
                                 {!isOwner && (
                                     <TouchableOpacity
-                                        style={[styles.gradientButton, { marginTop: Spacing.md, backgroundColor: Colors.warning }]}
+                                        style={[s.gradientButton, { marginTop: Spacing.md, backgroundColor: colors.warning }]}
                                         onPress={() => router.push({
                                             pathname: '/reviews/add',
                                             params: {
@@ -654,8 +679,8 @@ export default function BookingDetailScreen() {
                                             }
                                         })}
                                     >
-                                        <Ionicons name="star" size={20} color={Colors.white} />
-                                        <Text style={styles.gradientBtnText}>Rate Your Ride</Text>
+                                        <Ionicons name="star" size={20} color="#fff" />
+                                        <Text style={s.gradientBtnText}>Rate Your Ride</Text>
                                     </TouchableOpacity>
                                 )}
                             </>
@@ -665,39 +690,37 @@ export default function BookingDetailScreen() {
 
                 {/* Generated OTP Display (Owner only) */}
                 {generatedOtp && isOwner && (
-                    <View style={styles.section}>
-                        <View style={styles.otpCard}>
-                            <Text style={styles.otpLabel}>Generated OTP</Text>
-                            <Text style={styles.otpValue}>{generatedOtp.slice(0, 3)} {generatedOtp.slice(3)}</Text>
-                            <Text style={styles.otpHint}>Share this OTP with the renter to start/end the ride</Text>
+                    <View style={s.section}>
+                        <View style={[s.otpCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+                            <Text style={[s.otpLabel, { color: colors.textSecondary }]}>Generated OTP</Text>
+                            <Text style={[s.otpValue, { color: colors.primary }]}>{generatedOtp.slice(0, 3)} {generatedOtp.slice(3)}</Text>
+                            <Text style={[s.otpHint, { color: colors.textMuted }]}>Share this OTP with the renter to start/end the ride</Text>
                         </View>
                     </View>
                 )}
 
-                {/* ============================================ */}
                 {/* BOTTOM ACTIONS */}
-                {/* ============================================ */}
-                <View style={styles.actionSection}>
+                <View style={s.actionSection}>
                     {/* Owner: Approve / Reject */}
                     {isOwner && booking.status === 'requested' && (
-                        <View style={styles.actionRow}>
+                        <View style={s.actionRow}>
                             <TouchableOpacity
-                                style={[styles.actionBtn, { backgroundColor: Colors.success }]}
+                                style={[s.actionBtn, { backgroundColor: colors.success }]}
                                 onPress={handleApprove}
                                 disabled={actionLoading}
                             >
                                 {actionLoading ? (
-                                    <ActivityIndicator size="small" color={Colors.white} />
+                                    <ActivityIndicator size="small" color="#fff" />
                                 ) : (
-                                    <Text style={styles.actionBtnText}>✓ Approve</Text>
+                                    <Text style={s.actionBtnText}>✓ Approve</Text>
                                 )}
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.actionBtn, { backgroundColor: Colors.error }]}
+                                style={[s.actionBtn, { backgroundColor: colors.error }]}
                                 onPress={handleReject}
                                 disabled={actionLoading}
                             >
-                                <Text style={styles.actionBtnText}>✗ Reject</Text>
+                                <Text style={s.actionBtnText}>✗ Reject</Text>
                             </TouchableOpacity>
                         </View>
                     )}
@@ -705,11 +728,11 @@ export default function BookingDetailScreen() {
                     {/* Chat */}
                     {canChat && (
                         <TouchableOpacity
-                            style={styles.chatButton}
+                            style={[s.chatButton, { borderColor: colors.primary }]}
                             onPress={() => router.push(`/chat/${booking.id}`)}
                         >
-                            <Ionicons name="chatbubble-ellipses" size={20} color={Colors.primary} />
-                            <Text style={styles.chatBtnText}>
+                            <Ionicons name="chatbubble-ellipses" size={20} color={colors.primary} />
+                            <Text style={[s.chatBtnText, { color: colors.primary }]}>
                                 Chat with {isOwner ? 'Renter' : 'Owner'}
                             </Text>
                         </TouchableOpacity>
@@ -718,11 +741,11 @@ export default function BookingDetailScreen() {
                     {/* Cancel */}
                     {['requested', 'approved'].includes(booking.status) && (
                         <TouchableOpacity
-                            style={styles.cancelButton}
+                            style={[s.cancelButton, { borderColor: colors.error }]}
                             onPress={handleCancel}
                             disabled={actionLoading}
                         >
-                            <Text style={styles.cancelBtnText}>Cancel Booking</Text>
+                            <Text style={[s.cancelBtnText, { color: colors.error }]}>Cancel Booking</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -730,48 +753,46 @@ export default function BookingDetailScreen() {
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* ============================================ */}
             {/* OTP ENTRY MODAL (RENTER) */}
-            {/* ============================================ */}
             <Modal visible={otpModalVisible} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>
+                <View style={s.modalOverlay}>
+                    <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+                        <View style={s.modalHeader}>
+                            <Text style={[s.modalTitle, { color: colors.text }]}>
                                 {otpType === 'start' ? '🔑 Enter OTP to Start Ride' : '🏁 Enter OTP to End Ride'}
                             </Text>
                             <TouchableOpacity onPress={() => setOtpModalVisible(false)}>
-                                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+                                <Ionicons name="close" size={24} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
 
-                        <Text style={styles.modalSub}>
+                        <Text style={[s.modalSub, { color: colors.textSecondary }]}>
                             Enter the 6-digit OTP {otpType === 'start' ? 'shared by the owner' : 'to complete your ride'}.
                             Check your email or ask the owner directly.
                         </Text>
 
                         <TextInput
-                            style={styles.otpInput}
+                            style={[s.otpInput, { backgroundColor: colors.surface, borderColor: colors.primary, color: colors.text }]}
                             value={otpInput}
                             onChangeText={setOtpInput}
                             placeholder="000000"
-                            placeholderTextColor={Colors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="number-pad"
                             maxLength={6}
                             autoFocus
                         />
 
                         <TouchableOpacity
-                            style={[styles.gradientButton, { marginTop: Spacing.lg }]}
+                            style={[s.gradientButton, { marginTop: Spacing.lg, backgroundColor: colors.primary }]}
                             onPress={handleVerifyOTP}
                             disabled={actionLoading || otpInput.length !== 6}
                         >
                             {actionLoading ? (
-                                <ActivityIndicator size="small" color={Colors.white} />
+                                <ActivityIndicator size="small" color="#fff" />
                             ) : (
                                 <>
-                                    <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-                                    <Text style={styles.gradientBtnText}>Verify OTP</Text>
+                                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                                    <Text style={s.gradientBtnText}>Verify OTP</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -779,20 +800,18 @@ export default function BookingDetailScreen() {
                 </View>
             </Modal>
 
-            {/* ============================================ */}
             {/* PAYMENT METHOD MODAL (RENTER) */}
-            {/* ============================================ */}
             <Modal visible={paymentModalVisible} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>💳 Select Payment Method</Text>
+                <View style={s.modalOverlay}>
+                    <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+                        <View style={s.modalHeader}>
+                            <Text style={[s.modalTitle, { color: colors.text }]}>💳 Select Payment Method</Text>
                             <TouchableOpacity onPress={() => setPaymentModalVisible(false)}>
-                                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+                                <Ionicons name="close" size={24} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
 
-                        <Text style={styles.modalSub}>
+                        <Text style={[s.modalSub, { color: colors.textSecondary }]}>
                             Pay ₹{booking.total_amount.toLocaleString()} to {booking.owner?.full_name || 'the owner'}
                         </Text>
 
@@ -801,40 +820,42 @@ export default function BookingDetailScreen() {
                                 <TouchableOpacity
                                     key={method.key}
                                     style={[
-                                        styles.paymentMethodItem,
-                                        selectedPaymentMethod === method.key && styles.paymentMethodSelected,
+                                        s.paymentMethodItem,
+                                        { backgroundColor: colors.surface, borderColor: colors.border },
+                                        selectedPaymentMethod === method.key && { borderColor: colors.primary, backgroundColor: `${colors.primary}10` },
                                     ]}
                                     onPress={() => setSelectedPaymentMethod(method.key)}
                                 >
                                     <Ionicons
                                         name={method.icon as any}
                                         size={22}
-                                        color={selectedPaymentMethod === method.key ? Colors.primary : Colors.textSecondary}
+                                        color={selectedPaymentMethod === method.key ? colors.primary : colors.textSecondary}
                                     />
                                     <Text style={[
-                                        styles.paymentMethodText,
-                                        selectedPaymentMethod === method.key && { color: Colors.primary, fontWeight: '700' },
+                                        s.paymentMethodText,
+                                        { color: colors.text },
+                                        selectedPaymentMethod === method.key && { color: colors.primary, fontWeight: '700' },
                                     ]}>
                                         {method.label}
                                     </Text>
                                     {selectedPaymentMethod === method.key && (
-                                        <Ionicons name="checkmark-circle" size={22} color={Colors.primary} style={{ marginLeft: 'auto' }} />
+                                        <Ionicons name="checkmark-circle" size={22} color={colors.primary} style={{ marginLeft: 'auto' }} />
                                     )}
                                 </TouchableOpacity>
                             ))}
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.gradientButton, { marginTop: Spacing.lg, opacity: selectedPaymentMethod ? 1 : 0.5 }]}
+                            style={[s.gradientButton, { marginTop: Spacing.lg, backgroundColor: colors.primary, opacity: selectedPaymentMethod ? 1 : 0.5 }]}
                             onPress={handlePayment}
                             disabled={actionLoading || !selectedPaymentMethod}
                         >
                             {actionLoading ? (
-                                <ActivityIndicator size="small" color={Colors.white} />
+                                <ActivityIndicator size="small" color="#fff" />
                             ) : (
                                 <>
-                                    <Ionicons name="card" size={20} color={Colors.white} />
-                                    <Text style={styles.gradientBtnText}>Submit Payment</Text>
+                                    <Ionicons name="card" size={20} color="#fff" />
+                                    <Text style={s.gradientBtnText}>Submit Payment</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -846,106 +867,100 @@ export default function BookingDetailScreen() {
 }
 
 // ===============================
-// STYLES
+// STYLES (color-free — all colors applied inline)
 // ===============================
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: Colors.background },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
-    emptyText: { color: Colors.textMuted, fontSize: FontSize.md },
+const s = StyleSheet.create({
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
     // Vehicle Card
-    vehicleCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border },
+    vehicleCard: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 1 },
     vehicleImage: { width: 90, height: 65, borderRadius: Radius.md },
-    noImage: { backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center' },
+    noImage: { justifyContent: 'center', alignItems: 'center' },
     vehicleInfo: { flex: 1, marginLeft: Spacing.lg },
-    vehicleTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
-    vehicleSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+    vehicleTitle: { fontSize: FontSize.lg, fontWeight: '700' },
+    vehicleSub: { fontSize: FontSize.sm, marginTop: 2 },
 
     // Section
     section: { paddingHorizontal: Spacing.xl, marginTop: Spacing.lg },
-    sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, marginBottom: Spacing.md },
+    sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', marginBottom: Spacing.md },
 
     // Status
     statusBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.lg, borderRadius: Radius.lg, borderWidth: 1 },
     statusLabel: { fontSize: FontSize.lg, fontWeight: '700' },
-    statusSubText: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+    statusSubText: { fontSize: FontSize.sm, marginTop: 2 },
 
     // Details
-    detailsCard: { backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+    detailsCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
     detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
-    detailBorder: { borderTopWidth: 1, borderTopColor: Colors.border },
     detailLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    detailLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-    detailValue: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
+    detailLabel: { fontSize: FontSize.sm },
+    detailValue: { fontSize: FontSize.sm, fontWeight: '600' },
 
     // Person
-    personCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, padding: Spacing.lg },
-    personAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
-    personAvatarText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
-    personName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-    personSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+    personCard: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.lg },
+    personAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
+    personAvatarText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
+    personName: { fontSize: FontSize.md, fontWeight: '600' },
+    personSub: { fontSize: FontSize.sm, marginTop: 2 },
 
     // Info Card
-    infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, backgroundColor: `${Colors.warning}10`, borderWidth: 1, borderColor: Colors.warning, borderRadius: Radius.lg, padding: Spacing.lg, marginBottom: Spacing.sm },
-    infoCardTitle: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.warning },
-    infoCardSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
+    infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.lg, marginBottom: Spacing.sm },
+    infoCardTitle: { fontSize: FontSize.sm, fontWeight: '600' },
+    infoCardSub: { fontSize: FontSize.xs, marginTop: 2 },
 
     // Ride Section
     rideHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
-    rideHeaderText: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.primary },
+    rideHeaderText: { fontSize: FontSize.lg, fontWeight: '700' },
 
-    stepCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, padding: Spacing.lg, backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.sm },
-    stepBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: `${Colors.primary}30`, justifyContent: 'center', alignItems: 'center' },
-    stepBadgeText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.primary },
-    stepTitle: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
-    stepSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
+    stepCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, padding: Spacing.lg, borderRadius: Radius.lg, borderWidth: 1, marginBottom: Spacing.sm },
+    stepBadge: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    stepBadgeText: { fontSize: FontSize.xs, fontWeight: '700' },
+    stepTitle: { fontSize: FontSize.sm, fontWeight: '600' },
+    stepSub: { fontSize: FontSize.xs, marginTop: 2 },
 
-    rideTimeCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, backgroundColor: Colors.card, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.sm },
-    rideTimeText: { fontSize: FontSize.sm, color: Colors.text },
+    rideTimeCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, marginBottom: Spacing.sm },
+    rideTimeText: { fontSize: FontSize.sm },
 
     // OTP
-    otpCard: { alignItems: 'center', backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 2, borderColor: Colors.primary, padding: Spacing.xl },
-    otpLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.sm },
-    otpValue: { fontSize: 36, fontWeight: '800', color: Colors.primary, letterSpacing: 8 },
-    otpHint: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: Spacing.sm, textAlign: 'center' },
+    otpCard: { alignItems: 'center', borderRadius: Radius.lg, borderWidth: 2, padding: Spacing.xl },
+    otpLabel: { fontSize: FontSize.sm, marginBottom: Spacing.sm },
+    otpValue: { fontSize: 36, fontWeight: '800', letterSpacing: 8 },
+    otpHint: { fontSize: FontSize.xs, marginTop: Spacing.sm, textAlign: 'center' },
 
     // Buttons
-    payButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.primary, borderRadius: Radius.md, paddingVertical: Spacing.lg },
-    payButtonText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
+    payButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: Radius.md, paddingVertical: Spacing.lg },
+    payButtonText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
 
-    gradientButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.primary, borderRadius: Radius.md, paddingVertical: Spacing.lg, marginTop: Spacing.sm },
-    gradientBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
+    gradientButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: Radius.md, paddingVertical: Spacing.lg, marginTop: Spacing.sm },
+    gradientBtnText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
 
-    inspectionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderWidth: 1, borderColor: Colors.warning, borderRadius: Radius.md, paddingVertical: Spacing.md, marginTop: Spacing.sm },
+    inspectionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderWidth: 1, borderRadius: Radius.md, paddingVertical: Spacing.md, marginTop: Spacing.sm },
     inspectionBtnText: { fontWeight: '600', fontSize: FontSize.md },
 
     actionSection: { paddingHorizontal: Spacing.xl, marginTop: Spacing.xl, gap: Spacing.md },
     actionRow: { flexDirection: 'row', gap: Spacing.md },
     actionBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-    actionBtnText: { color: Colors.white, fontWeight: '600', fontSize: FontSize.md },
+    actionBtnText: { color: '#fff', fontWeight: '600', fontSize: FontSize.md },
 
-    chatButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderWidth: 1, borderColor: Colors.primary, borderRadius: Radius.md, paddingVertical: Spacing.md },
-    chatBtnText: { color: Colors.primary, fontWeight: '600', fontSize: FontSize.md },
+    chatButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderWidth: 1, borderRadius: Radius.md, paddingVertical: Spacing.md },
+    chatBtnText: { fontWeight: '600', fontSize: FontSize.md },
 
-    cancelButton: { borderWidth: 1, borderColor: Colors.error, borderRadius: Radius.md, paddingVertical: Spacing.md, alignItems: 'center' },
-    cancelBtnText: { color: Colors.error, fontWeight: '600', fontSize: FontSize.md },
+    cancelButton: { borderWidth: 1, borderRadius: Radius.md, paddingVertical: Spacing.md, alignItems: 'center' },
+    cancelBtnText: { fontWeight: '600', fontSize: FontSize.md },
 
     // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40 },
+    modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.xl, paddingBottom: 40 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
-    modalTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
-    modalSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
+    modalTitle: { fontSize: FontSize.lg, fontWeight: '700' },
+    modalSub: { fontSize: FontSize.sm, marginBottom: Spacing.md },
 
     otpInput: {
-        backgroundColor: Colors.surface,
         borderRadius: Radius.lg,
         borderWidth: 2,
-        borderColor: Colors.primary,
         padding: Spacing.lg,
         fontSize: 28,
         fontWeight: '700',
-        color: Colors.text,
         textAlign: 'center',
         letterSpacing: 10,
     },
@@ -956,14 +971,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: Spacing.md,
         padding: Spacing.lg,
-        backgroundColor: Colors.surface,
         borderRadius: Radius.lg,
         borderWidth: 1,
-        borderColor: Colors.border,
     },
-    paymentMethodSelected: {
-        borderColor: Colors.primary,
-        backgroundColor: `${Colors.primary}10`,
-    },
-    paymentMethodText: { fontSize: FontSize.md, color: Colors.text },
+    paymentMethodText: { fontSize: FontSize.md },
 });

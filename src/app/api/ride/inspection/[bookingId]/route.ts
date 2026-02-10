@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { REQUIRED_PRE_RIDE_POSITIONS } from '@/types/rideInspection';
 
@@ -17,26 +18,40 @@ export async function GET(
             return NextResponse.json({ error: 'Booking ID is required' }, { status: 400 });
         }
 
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() {
-                        return cookieStore.getAll();
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            cookieStore.set(name, value, options);
-                        });
-                    },
-                },
-            }
-        );
+        const authHeader = request.headers.get('Authorization');
+        let supabase;
+        let accessToken: string | undefined;
 
-        // Verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        if (authHeader) {
+            // Mobile app request with Bearer token
+            accessToken = authHeader.replace('Bearer ', '');
+            supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+        } else {
+            const cookieStore = await cookies();
+            supabase = createServerClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    cookies: {
+                        getAll() {
+                            return cookieStore.getAll();
+                        },
+                        setAll(cookiesToSet) {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
+                        },
+                    },
+                }
+            );
+        }
+
+        // Verify user is authenticated - pass token explicitly for mobile requests
+        const { data: { user } } = await supabase.auth.getUser(accessToken);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -60,8 +75,8 @@ export async function GET(
             .single();
 
         if (
-            booking.renter_id !== user.id && 
-            booking.owner_id !== user.id && 
+            booking.renter_id !== user.id &&
+            booking.owner_id !== user.id &&
             profile?.role !== 'admin'
         ) {
             return NextResponse.json({ error: 'Not authorized for this booking' }, { status: 403 });

@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { ImagePosition, InspectionType, REQUIRED_PRE_RIDE_POSITIONS } from '@/types/rideInspection';
 
@@ -12,29 +13,44 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 export async function POST(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() {
-                        return cookieStore.getAll();
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            cookieStore.set(name, value, options);
-                        });
-                    },
-                },
-            }
-        );
+        const authHeader = request.headers.get('Authorization');
+        let supabase;
+        let accessToken: string | undefined;
 
-        // Verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        if (authHeader) {
+            accessToken = authHeader.replace('Bearer ', '');
+            supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+        } else {
+            const cookieStore = await cookies();
+            supabase = createServerClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    cookies: {
+                        getAll() {
+                            return cookieStore.getAll();
+                        },
+                        setAll(cookiesToSet) {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
+                        },
+                    },
+                }
+            );
+        }
+
+        // Verify user is authenticated - pass token explicitly for mobile requests
+        const { data: { user } } = await supabase.auth.getUser(accessToken);
         if (!user) {
+            console.error('Upload API: User not authenticated');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        console.log('Upload API: User authenticated', user.id);
 
         // Parse form data
         const formData = await request.formData();
@@ -44,10 +60,12 @@ export async function POST(request: NextRequest) {
         const file = formData.get('file') as File;
         const notes = formData.get('notes') as string | null;
 
+        console.log('Upload API: Received data', { bookingId, position, inspectionType, fileSize: file?.size });
+
         // Validate required fields
         if (!bookingId || !position || !inspectionType || !file) {
-            return NextResponse.json({ 
-                error: 'Missing required fields: bookingId, position, inspectionType, file' 
+            return NextResponse.json({
+                error: 'Missing required fields: bookingId, position, inspectionType, file'
             }, { status: 400 });
         }
 
@@ -64,15 +82,15 @@ export async function POST(request: NextRequest) {
 
         // Validate file type
         if (!ALLOWED_TYPES.includes(file.type)) {
-            return NextResponse.json({ 
-                error: 'Invalid file type. Allowed: JPG, PNG, WebP' 
+            return NextResponse.json({
+                error: 'Invalid file type. Allowed: JPG, PNG, WebP'
             }, { status: 400 });
         }
 
         // Validate file size
         if (file.size > MAX_FILE_SIZE) {
-            return NextResponse.json({ 
-                error: 'File too large. Maximum size is 10MB' 
+            return NextResponse.json({
+                error: 'File too large. Maximum size is 10MB'
             }, { status: 400 });
         }
 
@@ -97,15 +115,15 @@ export async function POST(request: NextRequest) {
 
         // For pre_ride inspection, only renter should upload
         if (inspectionType === 'pre_ride' && uploadedByRole !== 'renter') {
-            return NextResponse.json({ 
-                error: 'Pre-ride inspection images must be uploaded by the renter' 
+            return NextResponse.json({
+                error: 'Pre-ride inspection images must be uploaded by the renter'
             }, { status: 403 });
         }
 
         // Check booking status for pre_ride
         if (inspectionType === 'pre_ride' && booking.status !== 'confirmed') {
-            return NextResponse.json({ 
-                error: 'Booking must be confirmed for pre-ride inspection' 
+            return NextResponse.json({
+                error: 'Booking must be confirmed for pre-ride inspection'
             }, { status: 400 });
         }
 
@@ -127,8 +145,8 @@ export async function POST(request: NextRequest) {
             });
 
         if (uploadError) {
-            console.error('Upload error:', uploadError);
-            return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
+            console.error('Upload API: Storage error:', uploadError);
+            return NextResponse.json({ error: `Failed to upload image: ${uploadError.message}` }, { status: 500 });
         }
 
         // Get public URL
@@ -152,7 +170,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (dbError) {
-            console.error('Database error:', dbError);
+            console.error('Upload API: DB error:', dbError);
             // Clean up uploaded file
             await supabase.storage.from(INSPECTION_BUCKET).remove([fileName]);
             return NextResponse.json({ error: 'Failed to save image record' }, { status: 500 });
@@ -177,13 +195,13 @@ export async function POST(request: NextRequest) {
             success: true,
             image: imageRecord,
             inspectionComplete,
-            message: inspectionComplete 
+            message: inspectionComplete
                 ? 'All required images uploaded. You can now request the start OTP from the owner.'
                 : 'Image uploaded successfully.',
         });
 
     } catch (error) {
-        console.error('Upload inspection image error:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        console.error('Upload API: Internal Fatal Error:', error);
+        return NextResponse.json({ error: `Internal server error: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
     }
 }

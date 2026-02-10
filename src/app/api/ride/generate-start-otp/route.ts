@@ -23,26 +23,41 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Booking ID is required' }, { status: 400 });
         }
 
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() {
-                        return cookieStore.getAll();
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            cookieStore.set(name, value, options);
-                        });
-                    },
-                },
-            }
-        );
+        const authHeader = request.headers.get('Authorization');
+        let supabase;
+        let accessToken: string | undefined;
 
-        // Verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        if (authHeader) {
+            // Mobile app request with Bearer token
+            accessToken = authHeader.replace('Bearer ', '');
+            supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+        } else {
+            // Web request with Cookies
+            const cookieStore = await cookies();
+            supabase = createServerClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    cookies: {
+                        getAll() {
+                            return cookieStore.getAll();
+                        },
+                        setAll(cookiesToSet) {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
+                        },
+                    },
+                }
+            );
+        }
+
+        // Verify user is authenticated - pass token explicitly for mobile requests
+        const { data: { user } } = await supabase.auth.getUser(accessToken);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -65,15 +80,15 @@ export async function POST(request: NextRequest) {
 
         // Verify booking status
         if (booking.status !== 'confirmed') {
-            return NextResponse.json({ 
-                error: 'Booking must be confirmed (paid) before generating start OTP' 
+            return NextResponse.json({
+                error: 'Booking must be confirmed (paid) before generating start OTP'
             }, { status: 400 });
         }
 
         // Check if ride already started
         if (booking.ride_status === 'started' || booking.ride_status === 'completed') {
-            return NextResponse.json({ 
-                error: 'Ride has already started or completed' 
+            return NextResponse.json({
+                error: 'Ride has already started or completed'
             }, { status: 400 });
         }
 
@@ -141,13 +156,14 @@ export async function POST(request: NextRequest) {
             success: true,
             otp: formatOTPForDisplay(otp),
             expiresAt,
-            message: renterEmail 
+            message: renterEmail
                 ? `OTP generated successfully. Email sent to ${renterEmail}.`
                 : 'OTP generated successfully. Could not send email (no email found).',
             emailSent,
         });
 
-    } catch {
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    } catch (error) {
+        console.error('Generate Start OTP Error:', error);
+        return NextResponse.json({ error: `Internal server error: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
     }
 }

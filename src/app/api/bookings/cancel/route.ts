@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID!;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET!;
@@ -88,13 +91,36 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (!['renter', 'owner'].includes(cancelledBy)) {
-            return NextResponse.json(
-                { error: 'cancelledBy must be "renter" or "owner"' },
-                { status: 400 }
-            );
+        // 1. Authenticate User
+        const authHeader = request.headers.get('Authorization');
+        let authClient;
+
+        if (authHeader) {
+            // Mobile app request with Bearer token
+            authClient = createClient(supabaseUrl, supabaseAnonKey, {
+                global: { headers: { Authorization: authHeader } }
+            });
+        } else {
+            // Web request with Cookies
+            const cookieStore = await cookies();
+            authClient = createServerClient(supabaseUrl, supabaseAnonKey, {
+                cookies: {
+                    getAll() { return cookieStore.getAll(); },
+                    setAll(cookiesToSet) {
+                        cookiesToSet.forEach(({ name, value, options }) => {
+                            cookieStore.set(name, value, options);
+                        });
+                    },
+                },
+            });
         }
 
+        const { data: { user } } = await authClient.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // 2. Fetch booking using Admin Client (to bypass RLS if needed, though usually RLS is fine)
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Fetch booking
@@ -107,6 +133,16 @@ export async function POST(request: NextRequest) {
         if (bookingError || !booking) {
             return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
         }
+
+        // 3. Verify Ownership
+        if (cancelledBy === 'renter' && booking.renter_id !== user.id) {
+            return NextResponse.json({ error: 'Not authorized to cancel this booking' }, { status: 403 });
+        }
+        if (cancelledBy === 'owner' && booking.owner_id !== user.id) {
+            return NextResponse.json({ error: 'Not authorized to cancel this booking' }, { status: 403 });
+        }
+
+        // ... continue with logic ...
 
         // Check if booking can be cancelled
         if (['cancelled', 'completed', 'rejected'].includes(booking.status)) {

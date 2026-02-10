@@ -248,12 +248,14 @@ export async function checkDateAvailability(
     endDate: string,
     excludeBookingId?: string
 ): Promise<boolean> {
+    // Overlap: existing.start_date < newEnd AND existing.end_date > newStart
     let query = supabase
         .from('bookings')
         .select('id')
         .eq('vehicle_id', vehicleId)
-        .in('status', ['requested', 'approved'])
-        .or(`start_date.lte.${endDate},end_date.gte.${startDate}`);
+        .in('status', ['requested', 'approved', 'confirmed'])
+        .lt('start_date', endDate)
+        .gt('end_date', startDate);
 
     if (excludeBookingId) {
         query = query.neq('id', excludeBookingId);

@@ -3,31 +3,46 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { REQUIRED_PRE_RIDE_POSITIONS } from '@/types/rideInspection';
 
 export async function POST(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() {
-                        return cookieStore.getAll();
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            cookieStore.set(name, value, options);
-                        });
-                    },
-                },
-            }
-        );
+        const authHeader = request.headers.get('Authorization');
+        let supabase;
+        let accessToken: string | undefined;
 
-        // Verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        if (authHeader) {
+            // Mobile app request with Bearer token
+            accessToken = authHeader.replace('Bearer ', '');
+            supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+        } else {
+            const cookieStore = await cookies();
+            supabase = createServerClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    cookies: {
+                        getAll() {
+                            return cookieStore.getAll();
+                        },
+                        setAll(cookiesToSet) {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
+                        },
+                    },
+                }
+            );
+        }
+
+        // Verify user is authenticated - pass token explicitly for mobile requests
+        const { data: { user } } = await supabase.auth.getUser(accessToken);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -51,22 +66,22 @@ export async function POST(request: NextRequest) {
 
         // Verify user is the renter
         if (booking.renter_id !== user.id) {
-            return NextResponse.json({ 
-                error: 'Only the renter can confirm inspection' 
+            return NextResponse.json({
+                error: 'Only the renter can confirm inspection'
             }, { status: 403 });
         }
 
         // Verify booking is confirmed and paid
         if (booking.status !== 'confirmed' || booking.payment_status !== 'paid') {
-            return NextResponse.json({ 
-                error: 'Booking must be confirmed and paid' 
+            return NextResponse.json({
+                error: 'Booking must be confirmed and paid'
             }, { status: 400 });
         }
 
         // Verify ride status is pending (not already submitted)
         if (booking.ride_status && booking.ride_status !== 'pending') {
-            return NextResponse.json({ 
-                error: 'Inspection already submitted' 
+            return NextResponse.json({
+                error: 'Inspection already submitted'
             }, { status: 400 });
         }
 
@@ -79,8 +94,8 @@ export async function POST(request: NextRequest) {
 
         if (imagesError) {
             console.error('Error fetching images:', imagesError);
-            return NextResponse.json({ 
-                error: 'Failed to verify inspection images' 
+            return NextResponse.json({
+                error: 'Failed to verify inspection images'
             }, { status: 500 });
         }
 
@@ -90,15 +105,15 @@ export async function POST(request: NextRequest) {
         );
 
         if (missingPositions.length > 0) {
-            return NextResponse.json({ 
-                error: `Missing required photos: ${missingPositions.join(', ')}` 
+            return NextResponse.json({
+                error: `Missing required photos: ${missingPositions.join(', ')}`
             }, { status: 400 });
         }
 
         // Update booking ride_status to 'photos_uploaded'
         const { error: updateError } = await supabase
             .from('bookings')
-            .update({ 
+            .update({
                 ride_status: 'photos_uploaded',
                 updated_at: new Date().toISOString()
             })
@@ -106,8 +121,8 @@ export async function POST(request: NextRequest) {
 
         if (updateError) {
             console.error('Error updating booking:', updateError);
-            return NextResponse.json({ 
-                error: 'Failed to update booking status' 
+            return NextResponse.json({
+                error: 'Failed to update booking status'
             }, { status: 500 });
         }
 

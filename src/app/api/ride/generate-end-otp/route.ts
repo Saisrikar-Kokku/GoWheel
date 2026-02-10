@@ -23,26 +23,41 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Booking ID is required' }, { status: 400 });
         }
 
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() {
-                        return cookieStore.getAll();
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            cookieStore.set(name, value, options);
-                        });
-                    },
-                },
-            }
-        );
+        const authHeader = request.headers.get('Authorization');
+        let supabase;
+        let accessToken: string | undefined;
 
-        // Verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        if (authHeader) {
+            // Mobile app request with Bearer token
+            accessToken = authHeader.replace('Bearer ', '');
+            supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+        } else {
+            // Web request with Cookies
+            const cookieStore = await cookies();
+            supabase = createServerClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    cookies: {
+                        getAll() {
+                            return cookieStore.getAll();
+                        },
+                        setAll(cookiesToSet) {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
+                        },
+                    },
+                }
+            );
+        }
+
+        // Verify user is authenticated - pass token explicitly for mobile requests
+        const { data: { user } } = await supabase.auth.getUser(accessToken);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -65,8 +80,8 @@ export async function POST(request: NextRequest) {
 
         // Verify ride has started
         if (booking.ride_status !== 'started') {
-            return NextResponse.json({ 
-                error: 'Ride must be started before generating end OTP' 
+            return NextResponse.json({
+                error: 'Ride must be started before generating end OTP'
             }, { status: 400 });
         }
 
@@ -115,7 +130,7 @@ export async function POST(request: NextRequest) {
             success: true,
             otp: formatOTPForDisplay(otp),
             expiresAt,
-            message: renterEmail 
+            message: renterEmail
                 ? `OTP generated successfully. Email sent to ${renterEmail}.`
                 : 'OTP generated successfully. Could not send email (no email found).',
             emailSent,

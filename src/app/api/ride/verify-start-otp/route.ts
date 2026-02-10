@@ -23,26 +23,41 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Booking ID and OTP are required' }, { status: 400 });
         }
 
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() {
-                        return cookieStore.getAll();
-                    },
-                    setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({ name, value, options }) => {
-                            cookieStore.set(name, value, options);
-                        });
-                    },
-                },
-            }
-        );
+        const authHeader = request.headers.get('Authorization');
+        let supabase;
+        let accessToken: string | undefined;
 
-        // Verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        if (authHeader) {
+            // Mobile app request with Bearer token
+            accessToken = authHeader.replace('Bearer ', '');
+            supabase = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { global: { headers: { Authorization: authHeader } } }
+            );
+        } else {
+            // Web request with Cookies
+            const cookieStore = await cookies();
+            supabase = createServerClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                {
+                    cookies: {
+                        getAll() {
+                            return cookieStore.getAll();
+                        },
+                        setAll(cookiesToSet) {
+                            cookiesToSet.forEach(({ name, value, options }) => {
+                                cookieStore.set(name, value, options);
+                            });
+                        },
+                    },
+                }
+            );
+        }
+
+        // Verify user is authenticated - pass token explicitly for mobile requests
+        const { data: { user } } = await supabase.auth.getUser(accessToken);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -65,22 +80,22 @@ export async function POST(request: NextRequest) {
 
         // Verify booking status
         if (booking.status !== 'confirmed') {
-            return NextResponse.json({ 
-                error: 'Booking must be confirmed before starting ride' 
+            return NextResponse.json({
+                error: 'Booking must be confirmed before starting ride'
             }, { status: 400 });
         }
 
         // Check if ride already started
         if (booking.ride_status === 'started' || booking.ride_status === 'completed') {
-            return NextResponse.json({ 
-                error: 'Ride has already started or completed' 
+            return NextResponse.json({
+                error: 'Ride has already started or completed'
             }, { status: 400 });
         }
 
         // Check if OTP exists
         if (!booking.ride_start_otp_hash || !booking.ride_start_otp_expires) {
-            return NextResponse.json({ 
-                error: 'No OTP generated. Ask the owner to generate an OTP.' 
+            return NextResponse.json({
+                error: 'No OTP generated. Ask the owner to generate an OTP.'
             }, { status: 400 });
         }
 
@@ -92,8 +107,8 @@ export async function POST(request: NextRequest) {
         );
 
         if (!validation.valid) {
-            return NextResponse.json({ 
-                error: validation.error 
+            return NextResponse.json({
+                error: validation.error
             }, { status: 400 });
         }
 
@@ -118,7 +133,7 @@ export async function POST(request: NextRequest) {
         try {
             // Fetch owner email from auth.users using admin client
             const { data: ownerData, error: ownerError } = await supabaseAdmin.auth.admin.getUserById(booking.owner_id);
-            
+
             if (!ownerError && ownerData?.user?.email) {
                 const vehicleTitle = booking.vehicle?.title || 'your vehicle';
                 const registrationNumber = booking.vehicle?.registration_number || '';

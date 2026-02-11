@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
+// Force Vercel redeploy to pick up new env vars
 import { verifySmtpConnection, sendEmail } from '@/services/emailService';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const testEmail = searchParams.get('email');
-    
+
     // Check environment variables
     const envStatus = {
         SMTP_HOST: process.env.SMTP_HOST ? '✅ Set' : '❌ Not set',
@@ -42,8 +43,8 @@ export async function GET(request: Request) {
         status: smtpConnected ? 'SMTP Connected' : 'SMTP Not Connected',
         environmentVariables: envStatus,
         smtpVerified: smtpConnected,
-        testEmailResult: testEmail 
-            ? testEmailResult 
+        testEmailResult: testEmail
+            ? testEmailResult
             : 'Add ?email=your@email.com to send a test email',
         tips: !smtpConnected ? [
             'Make sure you have set all SMTP environment variables in .env.local',
